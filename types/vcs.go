@@ -671,7 +671,8 @@ type CheckoutState struct {
 	// Branch is the branch the checkout is on, "" when it is on none (git's detached HEAD).
 	Branch string
 	// RemoteBranches are the remotes' branches as of the last fetch, each named
-	// `<remote>/<branch>`. A branch a remote has that was never fetched is absent.
+	// `<remote>/<branch>`, and each upstream a local branch's push recorded. A branch a
+	// remote has that was never fetched or pushed from here is absent.
 	RemoteBranches []string
 	// Base is the ref changes are compared against, as vcs\base names it (`origin/main`).
 	// The resolver fills it, not the driver: "" from a driver alone.

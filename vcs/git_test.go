@@ -2229,6 +2229,20 @@ func TestGitCheckoutState(t *testing.T) {
 	assert.Equal(t, types.CheckoutState{RemoteBranches: []string{"origin/main"}}, got)
 }
 
+// A branch whose push recorded an upstream is one the remote has, though no fetch mirrored
+// it. The branch-name rule then reads its push as an update.
+func TestGitCheckoutStateNamesAPushedBranchNoFetchMirrored(t *testing.T) {
+	dir, _ := checkpointRepository(t)
+	gitRun(t, dir, "remote", "add", "origin", "https://example.invalid/repo.git")
+	gitRun(t, dir, "config", "branch.work.remote", "origin")
+	gitRun(t, dir, "config", "branch.work.merge", "refs/heads/work")
+
+	got, err := gitVCS{}.CheckoutState(t.Context(), dir)
+
+	require.NoError(t, err)
+	assert.Equal(t, types.CheckoutState{Branch: "work", RemoteBranches: []string{"origin/work"}}, got)
+}
+
 func listRefs(t *testing.T, dir string) string {
 	t.Helper()
 	return gitTestOutput(t, dir, "for-each-ref", "--format=%(refname) %(objectname)")

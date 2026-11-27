@@ -1,14 +1,11 @@
 package bindings
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,7 +23,7 @@ import (
 )
 
 // ruleFactsKey carries the calling session's marker gate into a rule call, which is the
-// only place once, count and swap have a session to keep state in.
+// only place once and count have a session to keep state in.
 type ruleFactsKey struct{}
 
 // functionRule is one function-valued guard seam: magus\guard.spawn or
@@ -91,7 +88,7 @@ func registerFunctionRule(ctx context.Context, sess *buzz.Session, obs buzz.Dire
 }
 
 // registerVerdictMembers binds the members every function rule builds its answer with:
-// defer/advise/ask/deny, and once/count/swap for state that lasts the calling session.
+// defer/advise/ask/deny, and once/count for state that lasts the calling session.
 func registerVerdictMembers(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, guardMap vm.Value) {
 	// One per session, so a rule called on every hook reads the enum cases once.
 	enums := ffi.SessionEnums(ctx, sess, "magus")
@@ -128,16 +125,6 @@ func registerVerdictMembers(ctx context.Context, sess *buzz.Session, obs buzz.Di
 			return vm.Null, err
 		}
 		return vm.IntValue(int64(facts.Count(kind))), nil
-	}))
-	guardMap.MapSet("swap", directVal(obs, "magus.guard.swap", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) != 2 || !args[1].IsString() {
-			return vm.Null, errors.New(`magus\guard.swap: expected one non-empty key string and the value to keep, a string`)
-		}
-		facts, kind, err := ruleFactsArg(callCtx, "swap", args[:1])
-		if err != nil {
-			return vm.Null, err
-		}
-		return vm.StringValue(swapLast(facts, kind, args[1].AsString())), nil
 	}))
 	guardMap.MapSet("binary", directVal(obs, "magus.guard.binary", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) != 0 {
@@ -201,7 +188,7 @@ var guardBinary = sync.OnceValue(func() types.GuardBinary {
 	return b
 })
 
-// ruleFactsArg resolves once/count/swap's session and turns the author's key into a marker
+// ruleFactsArg resolves once/count's session and turns the author's key into a marker
 // kind. The key is hashed because a marker kind is a filename component, and prefixed so
 // no workspace key can collide with a compiled advisory's marker. The prefix is shared by
 // both rules, so a key means one thing to the whole policy.
@@ -215,51 +202,6 @@ func ruleFactsArg(ctx context.Context, member string, args []vm.Value) (hint.Gat
 	}
 	sum := sha256.Sum256([]byte(args[0].AsString()))
 	return facts, hint.MarkerKind(fmt.Sprintf("rule-%s-%s", member, hex.EncodeToString(sum[:8]))), nil
-}
-
-// lastValue is one line of a swap key's store. The last line wins.
-type lastValue struct {
-	Value string `json:"value"`
-}
-
-// swapLast appends value to kind's store and returns what the line before it kept.
-// O_APPEND lands each parallel hook's line whole. Like Count, a store magus cannot
-// write answers "", which speaks again.
-func swapLast(facts hint.Gate, kind hint.MarkerKind, value string) string {
-	if facts.CacheDir() == "" {
-		return ""
-	}
-	line, err := json.Marshal(lastValue{Value: value})
-	if err != nil {
-		return ""
-	}
-	line = append(line, '\n')
-	path := hint.MarkerPath(facts.CacheDir(), facts.Session(), kind)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return ""
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o644)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-	if _, err := f.Write(line); err != nil {
-		return ""
-	}
-	end, err := f.Seek(0, io.SeekCurrent)
-	if err != nil || end <= int64(len(line)) {
-		return ""
-	}
-	before := make([]byte, end-int64(len(line)))
-	if _, err := f.ReadAt(before, 0); err != nil {
-		return ""
-	}
-	before = bytes.TrimSuffix(before, []byte("\n"))
-	var prev lastValue
-	if err := json.Unmarshal(before[bytes.LastIndexByte(before, '\n')+1:], &prev); err != nil {
-		return ""
-	}
-	return prev.Value
 }
 
 // callFunctionRule runs a registered rule on req and reads its answer.

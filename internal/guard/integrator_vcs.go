@@ -2,11 +2,15 @@ package guard
 
 import (
 	"cmp"
+	"context"
+	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/job"
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // integrationMerge reports the one merge an integrate row exists to run:
@@ -54,6 +58,35 @@ func integratorLands(inv hint.Invocation) bool {
 	}
 	sub, _ := vcsSubcommand(inv)
 	return inv.Name == "git" && (sub == "cherry-pick" || sub == "revert")
+}
+
+// isRebase reports a rebase integratorRebase reads: one that moves only the checked-out branch.
+func isRebase(inv hint.Invocation) bool {
+	_, ok := integratorRebase(inv)
+	return ok
+}
+
+// ownBranchRefusal is why a worker may not rebase the branch site has checked out, "" when
+// that is its job's own branch. A job id is its branch name, and any other branch is
+// another job's history.
+func ownBranchRefusal(ctx context.Context, opts types.VCSOptions, row job.Job, backend string, site vcsSite) string {
+	root, ok := siteCheckout(ctx, opts, backend, site)
+	if !ok {
+		return "Which checkout it rebases in cannot be read."
+	}
+	opts.Name = backend
+	res, err := vcs.Resolve(ctx, root, "", opts)
+	if err != nil || res.VCS == nil {
+		return fmt.Sprintf("Version control is disabled or unresolvable for %s, so its branch cannot be read.", root)
+	}
+	ref, err := res.VCS.Ref(ctx, root)
+	if err != nil {
+		return fmt.Sprintf("Cannot read the branch in %s: %v.", root, err)
+	}
+	if branch := strings.TrimPrefix(ref, "refs/heads/"); branch != row.ID {
+		return fmt.Sprintf("It rebases %s, and a worker rebases only its own job's branch, %s.", cmp.Or(branch, "a detached HEAD"), row.ID)
+	}
+	return ""
 }
 
 // rebaseFlags are the options an integrator's rebase may carry. None runs

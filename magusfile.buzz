@@ -3365,15 +3365,13 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
         "libs/gopherbuzz/benchmarks/comparison/go.mod",
         "libs/gopherbuzz/benchmarks/comparison/go.sum"], editsExistingSource: true);
     go["go-fmt"](ctx);
-    // Tidy takes no file arguments: a forwarded file would make it refuse.
-    go["go-mod-tidy"](ctx, {"args": []});
+    go["go-mod-tidy"](ctx);
     // Not a project, so no project's format tidies it.
-    go["go-mod-tidy"](ctx.withCwd("libs/gopherbuzz/benchmarks/comparison"), {"args": []});
+    go["go-mod-tidy"](ctx.withCwd("libs/gopherbuzz/benchmarks/comparison"));
     // Keep in step with dprint.json's `includes`.
     ctx.writesFiles(["*.md", "benchmarks/**/*.md", "tapes/**/*.md",
         "internal/agent/agents-section.md"], editsExistingSource: true);
-    // dprint takes its files from dprint.json; a forwarded file would make it refuse.
-    markdown["dprint"](ctx, {"args": []});
+    markdown["dprint"](ctx);
 }
 
 // Runs the CI gates through their declared dependencies.

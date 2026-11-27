@@ -1,36 +1,39 @@
 // stubs-never-reach-main refuses a function whose whole body is its spell's stub body.
 // Under stub-first a placeholder belongs to an earlier layer, never to main. This rule
-// holds no language's stub text: it reads StubSyntax.body from each spell.
-//
-// Tier 3, judgment: the fix is the real body, or landing the chunk with its first caller.
+// holds no language's stub text and no extension: it reads StubSyntax.body and the
+// extensions from each spell the workspace loads.
 namespace stubsneverreachmain;
 
 import "assert";
+import "fs";
 import "std";
 import "magus";
-import "magus/lint";
-import "hack/lint/support" as support;
+import "analyzer" as analyzer;
+import "finding" as finding;
 
 // HOLE stands for a template hole while the body is escaped into a pattern.
 final HOLE = "@@HOLE@@";
 
-// reads: the source extensions of the spells that declare a stub body. A glob is static, so
-// a new language that declares one needs its extension added here.
-export fun reads() > [str] {
-    return ["**/*.go", "**/*.py", "**/*.rs", "**/*.ts", "**/*.tsx", "**/*.buzz"];
+// NAME is the analyzer's name, which a workspace's analyzers.yaml keys.
+export final NAME = "stubs-never-reach-main";
+
+// stubs is the analyzer for spells, the workspace's loaded ones. It reads every extension
+// a stub-declaring spell claims, as one glob so that an extension the tree lacks is no finding.
+// It refuses.
+export fun stubs(spells: [magus\Spell]) > analyzer\Analyzer {
+    final bySuffix = suffixes(spells);
+    final exts = bySuffix.keys().cloneMutable();
+    final ordered = exts.sort(fun (left: str, right: str) > bool => left < right);
+    return analyzer\check(NAME, tier: analyzer\Tier.mechanical,
+        fix: "Write the real body, or land the function with the first caller that needs it.",
+        source: "libs/analyzer/stubs-never-reach-main.buzz", files: ["**/*\{{ordered.join(",")}\}"], reach: analyzer\Reach.workspace,
+        run: fun (input: analyzer\Input) > [finding\Finding] => check(input.files, bySuffix: bySuffix));
 }
 
-// exempt: tests and fixtures hold stub text on purpose, to prove something rejects it.
-export fun exempt(p: str) > bool {
-    return p.endsWith("_test.go") or p.endsWith("_test.buzz") or p.endsWith("_test.py")
-        or p.endsWith(".test.ts") or p.indexOf("/testdata/") != null or p.startsWith("testdata/");
-}
-
-// check fails each function whose whole body is its spell's stub body.
-export fun check(files: [Path]) > [Finding] !> any {
-    final found = mut [<Finding>];
+// suffixes maps each extension of a spell that declares a stub body to that body's syntax.
+export fun suffixes(spells: [magus\Spell]) > {str: magus\StubSyntax} {
     final bySuffix = mut {<str: magus\StubSyntax>};
-    foreach (sp in magus\describe.spell()) {
+    foreach (sp in spells) {
         final stubs = sp.syntax?.stubs;
         if (stubs == null or stubs!.body == "") {
             continue;
@@ -39,19 +42,38 @@ export fun check(files: [Path]) > [Finding] !> any {
             bySuffix[ext] = stubs!;
         }
     }
+    return bySuffix;
+}
+
+// exempt: tests and fixtures hold stub text on purpose, to prove something rejects it. The
+// markers are conventions of test files across languages, so no language is named.
+export fun exempt(p: str) > bool {
+    final parts = p.split("/");
+    final base = parts[parts.len() - 1];
+    return base.indexOf("_test.") != null or base.indexOf(".test.") != null or base.startsWith("test_")
+        or p.indexOf("/testdata/") != null or p.startsWith("testdata/");
+}
+
+// check reports each function in files whose whole body is its spell's stub body.
+// A file it cannot read is a finding, never a clean pass.
+fun check(files: [str], bySuffix: {str: magus\StubSyntax}) > [finding\Finding] {
+    final found = mut [<finding\Finding>];
     foreach (f in files) {
-        if (exempt(f.value)) {
+        if (exempt(f)) {
             continue;
         }
-        final syntax = syntaxFor(f.value, bySuffix: bySuffix);
+        final syntax = syntaxFor(f, bySuffix: bySuffix);
         if (syntax == null) {
             continue;
         }
-        final readResult = support\read(f);
-        if (readResult.error != null) {
-            throw readResult.error!.message;
+        var src = "";
+        try {
+            src = fs\readFile(f);
+        } catch (err: any) {
+            found.append(finding\Finding{ path = f, message = "the file could not be read: {err}", fix = "Restore the file." });
+            continue;
         }
-        foreach (hit in judge(f.value, src: readResult.value!, style: syntax!.bodyStyle, template: syntax!.body)) {
+        foreach (hit in judge(f, src: src, style: syntax!.bodyStyle, template: syntax!.body)) {
             found.append(hit);
         }
     }
@@ -69,8 +91,8 @@ fun syntaxFor(p: str, bySuffix: {str: magus\StubSyntax}) > magus\StubSyntax? {
 }
 
 // judge is each stub body src holds as a function's whole body, a file at path.
-export fun judge(path: str, src: str, style: str, template: str) > [Finding] {
-    final found = mut [<Finding>];
+export fun judge(path: str, src: str, style: str, template: str) > [finding\Finding] {
+    final found = mut [<finding\Finding>];
     final body = bodyPattern(template);
     if (style == "brace") {
         var cursor = 0;
@@ -80,22 +102,22 @@ export fun judge(path: str, src: str, style: str, template: str) > [Finding] {
                 continue;
             }
             cursor = at! + hit[0].len();
-            found.append(finding(path, line: lineOf(src, at: at!)));
+            found.append(stubFinding(path, line: lineOf(src, at: at!)));
         }
         return found;
     }
     if (style == "indent") {
         foreach (line in indentHits(src.split("\n"), body: body)) {
-            found.append(finding(path, line: line));
+            found.append(stubFinding(path, line: line));
         }
     }
     return found;
 }
 
-fun finding(path: str, line: int) > Finding {
-    return Finding{ path = path, line = line,
+fun stubFinding(path: str, line: int) > finding\Finding {
+    return finding\Finding{ path = path, line = line,
         message = "a function's whole body is its language's stub body, so a placeholder reached main",
-        hint = "Write the real body, or land this function with the first caller that needs it: under stub-first a stub belongs to an earlier layer only." };
+        fix = "Write the real body, or land this function with the first caller that needs it: under stub-first a stub belongs to an earlier layer only." };
 }
 
 // bodyPattern is the regex for a stub body template: its text escaped, whitespace of any
@@ -212,4 +234,24 @@ test "tests and fixtures are exempt" {
     assert\equal(exempt("spells/lex_test.go"), want: true, message: "go test");
     assert\equal(exempt("libs/x/testdata/a.go"), want: true, message: "testdata");
     assert\equal(exempt("spells/stubs.go"), want: false, message: "source");
+}
+
+test "a test file of any language is exempt by its name" {
+    assert\equal(exempt("a/lex.test.ts"), want: true, message: "ts test");
+    assert\equal(exempt("a/test_lex.py"), want: true, message: "py test");
+    assert\equal(exempt("a/lex_test.buzz"), want: true, message: "buzz test");
+    assert\equal(exempt("a/contest.rs"), want: false, message: "a name that merely holds test");
+}
+
+test "only a spell that declares a stub body contributes its extensions" {
+    final stub = magus\StubSyntax{ bodyStyle = "brace", body = "panic(\"x\")" };
+    final got = suffixes([
+        magus\Spell{ name = "lang", extensions = [".zz", ".zy"], syntax = magus\Syntax{ stubs = stub } },
+        magus\Spell{ name = "plain", extensions = [".md"] },
+        magus\Spell{ name = "empty", extensions = [".yy"], syntax = magus\Syntax{ stubs = magus\StubSyntax{} } },
+    ]);
+    assert\equal(got.keys().len(), want: 2, message: "the two of the one spell");
+    assert\equal(got.hasKey(".zz"), want: true, message: "first extension");
+    assert\equal(got.hasKey(".md"), want: false, message: "a spell with no syntax");
+    assert\equal(got.hasKey(".yy"), want: false, message: "an empty body");
 }

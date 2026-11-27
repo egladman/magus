@@ -110,7 +110,7 @@ func (s *commitGradeRoutesSuite) TestAScriptHidingABranchForceIsRefused() {
 
 func (s *commitGradeRoutesSuite) TestAScriptHidingARebaseIsRefused() {
 	script := s.script("fold.sh", "git rebase main\n")
-	s.Contains(s.deny("bash "+script), "`git rebase` stays with the orchestrator")
+	s.Contains(s.deny("bash "+script), "a worker rebases only its own job's branch")
 }
 
 func (s *commitGradeRoutesSuite) TestAScriptTheWorkerMayRunPasses() {
@@ -148,7 +148,7 @@ func (s *commitGradeRoutesSuite) TestAScriptCallingItselfTwiceUnderADeadLeasePas
 func (s *commitGradeRoutesSuite) TestAVerbInANestedScriptIsRefused() {
 	inner := s.script("inner.sh", "git rebase main\n")
 	outer := s.script("outer.sh", fmt.Sprintf("sh %s\n", inner))
-	s.Contains(s.deny("sh "+outer), "`git rebase` stays with the orchestrator")
+	s.Contains(s.deny("sh "+outer), "a worker rebases only its own job's branch")
 }
 
 // scriptIn writes an executable script in a subdirectory of the checkout.
@@ -165,20 +165,20 @@ func (s *commitGradeRoutesSuite) TestACdBeforeAScriptFindsItThere() {
 func (s *commitGradeRoutesSuite) TestACdBeforeAScriptJudgesTheOneItRuns() {
 	s.script("run.sh", "git status --short\n")
 	s.scriptIn("tools", "run.sh", "git rebase main\n")
-	s.Contains(s.deny("cd tools && ./run.sh"), "`git rebase` stays with the orchestrator")
+	s.Contains(s.deny("cd tools && ./run.sh"), "a worker rebases only its own job's branch")
 	s.Empty(s.deny("./run.sh"))
 }
 
 func (s *commitGradeRoutesSuite) TestAScriptRunsItsOwnRelativeCallsFromTheCd() {
 	s.scriptIn("tools", "outer.sh", "./inner.sh\n")
 	s.scriptIn("tools", "inner.sh", "git rebase main\n")
-	s.Contains(s.deny("cd tools && ./outer.sh"), "`git rebase` stays with the orchestrator")
+	s.Contains(s.deny("cd tools && ./outer.sh"), "a worker rebases only its own job's branch")
 }
 
 func (s *commitGradeRoutesSuite) TestAScriptNameIsJudgedInEachDirectoryItRuns() {
 	s.script("run.sh", "git status --short\n")
 	s.scriptIn("tools", "run.sh", "git rebase main\n")
-	s.Contains(s.deny("./run.sh && cd tools && ./run.sh"), "`git rebase` stays with the orchestrator")
+	s.Contains(s.deny("./run.sh && cd tools && ./run.sh"), "a worker rebases only its own job's branch")
 }
 
 func (s *commitGradeRoutesSuite) TestARelativeScriptAfterAnUnknownCdIsRefused() {
@@ -205,7 +205,7 @@ func (s *commitGradeRoutesSuite) TestACommitInAScriptAfterAnUnknownCdIsRefused()
 func (s *commitGradeRoutesSuite) TestALiteralCdInAScriptAfterAnUnknownCdIsRead() {
 	s.scriptIn("tools", "inner.sh", "git rebase main\n")
 	script := s.script("outer.sh", fmt.Sprintf("cd %s && ./inner.sh\n", filepath.Join(s.dir, "tools")))
-	s.Contains(s.deny(fmt.Sprintf(`cd "$WHERE" && %s`, script)), "`git rebase` stays with the orchestrator")
+	s.Contains(s.deny(fmt.Sprintf(`cd "$WHERE" && %s`, script)), "a worker rebases only its own job's branch")
 }
 
 func (s *commitGradeRoutesSuite) TestAScriptInASubstitutionRunsFromTheCallDirectory() {
@@ -981,4 +981,41 @@ func (s *WorkerRevertSuite) TestIsRefusedARevertOutsideItsWritePaths() {
 
 func (s *WorkerRevertSuite) TestIsRefusedARebase() {
 	s.NotEmpty(s.judge("git rebase origin/main"), "only an integrator rebases")
+}
+
+// WorkerRebaseSuite pins that a worker rebases its own job branch onto a ref its row names.
+// It never rebases another branch, or onto a ref the row does not name.
+type WorkerRebaseSuite struct{ workerRevert }
+
+func TestWorkerRebaseSuite(t *testing.T) { suite.Run(t, new(WorkerRebaseSuite)) }
+
+func (s *WorkerRebaseSuite) SetupTest() {
+	s.build()
+	s.worker.ID = "lease-job"
+	s.worker.Checkpoint = s.repo.origin.Git("-C", s.wt, "rev-parse", "HEAD")
+	s.worker.DependsOn = []string{"done-a"}
+	s.ledger()
+}
+
+func (s *WorkerRebaseSuite) TestRebasesItsBranchOntoARefItsRowNames() {
+	for _, command := range []string{
+		"git rebase " + s.worker.Checkpoint[:12],
+		"git rebase done-a",
+		"git rebase --onto origin/done-a HEAD~1",
+		"git rebase --continue",
+	} {
+		s.Empty(s.judge(command), "%q", command)
+	}
+}
+
+func (s *WorkerRebaseSuite) TestIsRefusedARebaseOntoARefItsRowDoesNotName() {
+	reason := s.judge("git rebase origin/main")
+	s.Contains(reason, "It rebases onto origin/main")
+	s.Contains(reason, "done-a")
+}
+
+func (s *WorkerRebaseSuite) TestIsRefusedARebaseOfAnotherBranch() {
+	s.repo.git(s.wt, "checkout", "-q", "-b", "other-job")
+	s.Contains(s.judge("git rebase done-a"), "only its own job's branch, lease-job")
+	s.NotEmpty(s.judge("git rebase done-a lease-job"), "a second operand switches branches first")
 }

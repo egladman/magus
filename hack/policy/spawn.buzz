@@ -453,7 +453,8 @@ export object ForkCounts {
 // refuses. A record no reader could see passes with a note, because refusing
 // on its shape would stop forks that integrate.
 export fun decideFork(fork: mandate\Fork, counts: ForkCounts, limit: int) > GuardVerdict {
-    if (counts.finishedBranches.len() == 0 or counts.finishedBranches.len() < limit) {
+    final finished = othersBranches(counts.finishedBranches, id: fork.id);
+    if (finished.len() == 0 or finished.len() < limit) {
         return magus\guard.defer();
     }
     if (fork.known and (fork.integrates.len() > 0 or fork.parent != "")) {
@@ -463,7 +464,7 @@ export fun decideFork(fork: mandate\Fork, counts: ForkCounts, limit: int) > Guar
     if (counts.branchesUnknown != "") {
         unread = "; unread, so not counted: {counts.branchesUnknown}";
     }
-    final facts = "{counts.finishedBranches.len()} place(s) hold finished work off the base: {counts.finishedBranches.join(", ")}{unread}; "
+    final facts = "{finished.len()} place(s) hold finished work off the base: {finished.join(", ")}{unread}; "
         + "{describeTest(counts)}. The limit is {limit} places, a starting guess: "
         + "change finishedBranchLimit in hack/policy/spawn.buzz if it is wrong.";
     if (!fork.known) {
@@ -473,6 +474,15 @@ export fun decideFork(fork: mandate\Fork, counts: ForkCounts, limit: int) > Guar
         + "Fork dependent work as a child of a row on an open change, which adds no place. "
         + "For independent work a person merges a change or raises the limit. "
         + "To fold the rows off every change into one, fork `./magus job fork --stdin --checkout <dir>` with this record: {counts.integrateRecord}");
+}
+
+// othersBranches is branches less job id's own: a re-fork reworks that branch
+// rather than adding one. forkFacts names each `<branch> (job <job>, ...)`.
+fun othersBranches(branches: [str], id: str) > [str] {
+    if (id == "") {
+        return branches;
+    }
+    return branches.filter(fun (index: int, b: str) > bool => b.indexOf("(job {id},") == null);
 }
 
 fun describeTest(counts: ForkCounts) > str {
@@ -551,6 +561,11 @@ fun forkProgram(args: [str]) > helpers\Program {
 
 fun noFile(path: str) > str {
     return "";
+}
+
+test "a re-fork does not count its own finished branch toward the limit" {
+    std\assert(decideFork(mandate\Fork{ id = "done-3" }, counts: waiting(10), limit: 10).decision == magus\GuardDecision.defer, message: "its own branch");
+    std\assert(decideFork(mandate\Fork{ id = "done-1" }, counts: waiting(11), limit: 10).decision == magus\GuardDecision.deny, message: "ten others still refuse");
 }
 
 test "a top-level fork at the limit is refused, printing both counts, the last test and the file" {
