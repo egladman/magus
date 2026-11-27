@@ -69,19 +69,19 @@ tar -xzf "magus_windows_amd64_static.tar.gz" magus.exe</code></pre>
       <p class="landing-sub">magus is pre-1.0 and the builds are not equally proven. CI runs the full test suite on <strong>linux/amd64 only</strong>; every other platform is built by the release pipeline but not tested by it, and neither Windows build has ever been executed here. <a href="../guides/setup/#platform-support">What is tested, per platform</a>.</p>
     </div>
   </section>
-`, {"routes": routeLinks()});
+`, data: {"routes": routeLinks()});
 
         final title = "Download";
         final desc = "Install magus on macOS, Linux or Windows. One binary, no runtime, and the exact command for the machine you are on.";
-        final r1 = renderPage(title, desc, html, DOWNLOAD_SRC, "", "download/", "", mut [], "", site);
+        final r1 = renderPage(title, description: desc, content: html, srcRel: DOWNLOAD_SRC, pager: "", canonUrl: "download/", reading: "", tags: mut [], generatedFrom: "", site: site);
         if (r1.error -> failed) { return result\Result::<bool>{ error = failed }; }
         final doc = r1.value!;
         fs\mkdirAll(site.inputs.outDir + "/download");
-        final of = io\File.open(site.inputs.outDir + "/download/index.html", io\FileMode.write);
+        final of = io\File.open(site.inputs.outDir + "/download/index.html", mode: io\FileMode.write);
         of.write(doc);
         of.close();
-        final r2 = site.addRecord("download/", title, desc,
-            "---\ntags: [install, download, release, macos, linux, windows, mise, container]\n---\nInstall magus. One binary, no runtime, and the exact command for the machine you are on.\n");
+        final r2 = site.addRecord(url: "download/", title: title, desc: desc,
+            md: "---\ntags: [install, download, release, macos, linux, windows, mise, container]\n---\nInstall magus. One binary, no runtime, and the exact command for the machine you are on.\n");
         if (r2.error -> failed) { return result\Result::<bool>{ error = failed }; }
         return result\ok::<bool>(true);
     } catch (err: any) {

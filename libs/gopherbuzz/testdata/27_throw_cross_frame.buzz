@@ -2,9 +2,13 @@
 fun risky() {
     throw "inner error";
 }
+
 var __r = "no catch";
-try {
-    risky();
-} catch (e) {
-    __r = "caught " + e;
+
+fun main(args: [str]) > void !> any {
+    try {
+        risky();
+    } catch (e) {
+        __r = "caught " + e;
+    }
 }

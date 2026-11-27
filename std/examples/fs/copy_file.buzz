@@ -1,8 +1,10 @@
 import "std";
 import "fs";
 
-try {
-    fs\copyFile("dist/magus", "/usr/local/bin/magus");
-} catch (e) {
-    std\print("could not install dist/magus");
+fun main(args: [str]) > void {
+    try {
+        fs\copyFile("dist/magus", dst: "/usr/local/bin/magus");
+    } catch (e) {
+        std\print("could not install dist/magus");
+    }
 }

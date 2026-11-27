@@ -73,7 +73,7 @@ Every binary the spell's ops run, keyed by the bin name a Command names, each wi
 export fun mgs_getLanguage() > Language
 ```
 
-The source language the spell adapts: its name, its file extensions and, when the spell can declare it honestly, its comment and string syntax.
+The source language the spell adapts: its name, its file extensions and, when the spell can declare it honestly, its comment and string syntax. Its encodings are how emit writes a value into that source.
 
 ## mgs_getSymbolIndexer
 
@@ -121,7 +121,7 @@ Whether the spell delegates to a foreign process that manages its own dependency
 export fun mgs_getModeArgs() > {str: [str]}
 ```
 
-The args that tell an op apart from other uses of a program with no subcommand, keyed by op name: node runs scripts too, and only --test is node-test.
+The args that tell an op apart from other uses of a program with no subcommand, keyed by op name. node runs scripts too, and only --test is node-test.
 
 ## mgs_listTargets
 

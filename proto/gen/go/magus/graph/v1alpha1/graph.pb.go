@@ -1280,7 +1280,10 @@ type FindAffectedRequest struct {
 	// base is the VCS ref to diff against. Empty takes the workspace's configured base - the
 	// same resolution `magus affected` uses - so a caller with no opinion gets the one the repo
 	// already agreed on.
-	Base          string `protobuf:"bytes,1,opt,name=base,proto3" json:"base,omitempty"`
+	Base string `protobuf:"bytes,1,opt,name=base,proto3" json:"base,omitempty"`
+	// target is the target the plan runs, as `magus affected <target> --plan` takes it. Empty
+	// plans `ci`, the run `magus affected --impact` names as its follow-up; the plan echoes it.
+	Target        string `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1322,16 +1325,32 @@ func (x *FindAffectedRequest) GetBase() string {
 	return ""
 }
 
-// Affected is the reach of one VCS diff: which projects a change forces work in.
+func (x *FindAffectedRequest) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+// Affected is the reach of one VCS diff: which projects a change forces work in, why, and what
+// runs over them.
 type Affected struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	Base         string                 `protobuf:"bytes,1,opt,name=base,proto3" json:"base,omitempty"`                                      // the ref actually diffed against, after resolution
 	ChangedFiles int32                  `protobuf:"varint,2,opt,name=changed_files,json=changedFiles,proto3" json:"changed_files,omitempty"` // how many paths the diff carried
 	Ids          []string               `protobuf:"bytes,3,rep,name=ids,proto3" json:"ids,omitempty"`                                        // project node ids in the transitive reverse closure, sorted
 	// fallback is why the answer is not definitive: a shallow clone, no VCS, an unreadable base.
-	// ids is empty whenever it is set, and the two are read together - an empty ids with no
-	// fallback means the diff genuinely reaches nothing, which is a real answer.
-	Fallback      string `protobuf:"bytes,4,opt,name=fallback,proto3" json:"fallback,omitempty"`
+	// ids, seeds, reasons and plan are empty whenever it is set, and the two are read together -
+	// an empty ids with no fallback means the diff genuinely reaches nothing, which is a real
+	// answer.
+	Fallback string `protobuf:"bytes,4,opt,name=fallback,proto3" json:"fallback,omitempty"`
+	// seeds are the paths the diff carried, sorted, each with the project that owns it.
+	Seeds []*AffectedSeed `protobuf:"bytes,5,rep,name=seeds,proto3" json:"seeds,omitempty"`
+	// reasons says why each project in ids is there, in ids order: `magus affected --explain`
+	// for every project at once.
+	Reasons []*AffectedReason `protobuf:"bytes,6,rep,name=reasons,proto3" json:"reasons,omitempty"`
+	// plan is what runs over the set: `magus affected <target> --plan`, flattened to its units.
+	Plan          *AffectedPlan `protobuf:"bytes,7,opt,name=plan,proto3" json:"plan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1394,6 +1413,364 @@ func (x *Affected) GetFallback() string {
 	return ""
 }
 
+func (x *Affected) GetSeeds() []*AffectedSeed {
+	if x != nil {
+		return x.Seeds
+	}
+	return nil
+}
+
+func (x *Affected) GetReasons() []*AffectedReason {
+	if x != nil {
+		return x.Reasons
+	}
+	return nil
+}
+
+func (x *Affected) GetPlan() *AffectedPlan {
+	if x != nil {
+		return x.Plan
+	}
+	return nil
+}
+
+// AffectedSeed is one changed path and what it seeds.
+type AffectedSeed struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Path  string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"` // workspace-relative, slash-separated
+	// project is the project node id the affected set charged the path to; empty when the path
+	// sits outside every project and seeds nothing.
+	Project string `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
+	// role is the path's role as `magus describe file` gives it: "output" (generated: regenerate
+	// it, never hand-edit), "source", "maintained" or "unclaimed".
+	Role string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	// undeclared is true when no project declares the path, so it seeds its project by
+	// directory containment alone and moves no cache key.
+	Undeclared    bool `protobuf:"varint,4,opt,name=undeclared,proto3" json:"undeclared,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AffectedSeed) Reset() {
+	*x = AffectedSeed{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AffectedSeed) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AffectedSeed) ProtoMessage() {}
+
+func (x *AffectedSeed) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AffectedSeed.ProtoReflect.Descriptor instead.
+func (*AffectedSeed) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *AffectedSeed) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *AffectedSeed) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *AffectedSeed) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *AffectedSeed) GetUndeclared() bool {
+	if x != nil {
+		return x.Undeclared
+	}
+	return false
+}
+
+// AffectedReason is why one project is in the affected set.
+type AffectedReason struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`      // the project node id, as it appears in ids
+	Seed  bool                   `protobuf:"varint,2,opt,name=seed,proto3" json:"seed,omitempty"` // a changed path sits in the project itself
+	// chains are the shortest chain from each seed that reaches the project.
+	Chains        []*AffectedChain `protobuf:"bytes,3,rep,name=chains,proto3" json:"chains,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AffectedReason) Reset() {
+	*x = AffectedReason{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AffectedReason) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AffectedReason) ProtoMessage() {}
+
+func (x *AffectedReason) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AffectedReason.ProtoReflect.Descriptor instead.
+func (*AffectedReason) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *AffectedReason) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AffectedReason) GetSeed() bool {
+	if x != nil {
+		return x.Seed
+	}
+	return false
+}
+
+func (x *AffectedReason) GetChains() []*AffectedChain {
+	if x != nil {
+		return x.Chains
+	}
+	return nil
+}
+
+// AffectedChain is one route a change took from its seed to a project.
+type AffectedChain struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Seed  string                 `protobuf:"bytes,1,opt,name=seed,proto3" json:"seed,omitempty"` // the project node id holding the changed paths
+	// steps walk from the seed to the project, each a depends_on edge walked against its own
+	// direction (forward=false), since the dependent is the edge's source. Empty when the
+	// project is the seed.
+	Steps         []*PathStep `protobuf:"bytes,2,rep,name=steps,proto3" json:"steps,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AffectedChain) Reset() {
+	*x = AffectedChain{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AffectedChain) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AffectedChain) ProtoMessage() {}
+
+func (x *AffectedChain) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AffectedChain.ProtoReflect.Descriptor instead.
+func (*AffectedChain) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *AffectedChain) GetSeed() string {
+	if x != nil {
+		return x.Seed
+	}
+	return ""
+}
+
+func (x *AffectedChain) GetSteps() []*PathStep {
+	if x != nil {
+		return x.Steps
+	}
+	return nil
+}
+
+// AffectedPlan is the shard plan for one target over the affected set, flattened: a viewer
+// asks what runs, not how it packs onto runners.
+type AffectedPlan struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Target string                 `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"` // the target planned
+	Source string                 `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"` // what the plan computed the set from, e.g. "git diff vs origin/main"
+	// units are what runs: stage zero's units first, then each shard's, in plan order.
+	Units []*PlanUnit `protobuf:"bytes,3,rep,name=units,proto3" json:"units,omitempty"`
+	// unreached are units of affected projects whose closures read no changed path, sorted.
+	// Each replays from the cache, so no shard runs it.
+	Unreached []*PlanUnit `protobuf:"bytes,4,rep,name=unreached,proto3" json:"unreached,omitempty"`
+	// unbounded_by, when set, says why the set is not a proof: the diff edits a declaration, a
+	// dependency manifest or a toolchain pin, or touches a path no project claims.
+	UnboundedBy   string `protobuf:"bytes,5,opt,name=unbounded_by,json=unboundedBy,proto3" json:"unbounded_by,omitempty"`
+	Command       string `protobuf:"bytes,6,opt,name=command,proto3" json:"command,omitempty"` // the command that runs the plan, e.g. "magus affected ci"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AffectedPlan) Reset() {
+	*x = AffectedPlan{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AffectedPlan) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AffectedPlan) ProtoMessage() {}
+
+func (x *AffectedPlan) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AffectedPlan.ProtoReflect.Descriptor instead.
+func (*AffectedPlan) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *AffectedPlan) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *AffectedPlan) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *AffectedPlan) GetUnits() []*PlanUnit {
+	if x != nil {
+		return x.Units
+	}
+	return nil
+}
+
+func (x *AffectedPlan) GetUnreached() []*PlanUnit {
+	if x != nil {
+		return x.Unreached
+	}
+	return nil
+}
+
+func (x *AffectedPlan) GetUnboundedBy() string {
+	if x != nil {
+		return x.UnboundedBy
+	}
+	return ""
+}
+
+func (x *AffectedPlan) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
+// PlanUnit is one target of one project.
+type PlanUnit struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Project       string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"` // the project node id
+	Target        string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`   // the target name
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlanUnit) Reset() {
+	*x = PlanUnit{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlanUnit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlanUnit) ProtoMessage() {}
+
+func (x *PlanUnit) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlanUnit.ProtoReflect.Descriptor instead.
+func (*PlanUnit) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *PlanUnit) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *PlanUnit) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
 type Path struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	From          string                 `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
@@ -1406,7 +1783,7 @@ type Path struct {
 
 func (x *Path) Reset() {
 	*x = Path{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[18]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1418,7 +1795,7 @@ func (x *Path) String() string {
 func (*Path) ProtoMessage() {}
 
 func (x *Path) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[18]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1431,7 +1808,7 @@ func (x *Path) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Path.ProtoReflect.Descriptor instead.
 func (*Path) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{18}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *Path) GetFrom() string {
@@ -1476,7 +1853,7 @@ type PathStep struct {
 
 func (x *PathStep) Reset() {
 	*x = PathStep{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[19]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1488,7 +1865,7 @@ func (x *PathStep) String() string {
 func (*PathStep) ProtoMessage() {}
 
 func (x *PathStep) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[19]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1501,7 +1878,7 @@ func (x *PathStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PathStep.ProtoReflect.Descriptor instead.
 func (*PathStep) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{19}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *PathStep) GetFrom() string {
@@ -1541,7 +1918,7 @@ type GetGraphStatsRequest struct {
 
 func (x *GetGraphStatsRequest) Reset() {
 	*x = GetGraphStatsRequest{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[20]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1553,7 +1930,7 @@ func (x *GetGraphStatsRequest) String() string {
 func (*GetGraphStatsRequest) ProtoMessage() {}
 
 func (x *GetGraphStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[20]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1566,7 +1943,7 @@ func (x *GetGraphStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGraphStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetGraphStatsRequest) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{20}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetGraphStatsRequest) GetKind() string {
@@ -1592,7 +1969,7 @@ type GraphStats struct {
 
 func (x *GraphStats) Reset() {
 	*x = GraphStats{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[21]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1604,7 +1981,7 @@ func (x *GraphStats) String() string {
 func (*GraphStats) ProtoMessage() {}
 
 func (x *GraphStats) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[21]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1617,7 +1994,7 @@ func (x *GraphStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphStats.ProtoReflect.Descriptor instead.
 func (*GraphStats) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{21}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GraphStats) GetNodeCount() int32 {
@@ -1690,7 +2067,7 @@ type GodNode struct {
 
 func (x *GodNode) Reset() {
 	*x = GodNode{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[22]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1702,7 +2079,7 @@ func (x *GodNode) String() string {
 func (*GodNode) ProtoMessage() {}
 
 func (x *GodNode) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[22]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1715,7 +2092,7 @@ func (x *GodNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GodNode.ProtoReflect.Descriptor instead.
 func (*GodNode) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{22}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GodNode) GetId() string {
@@ -1775,7 +2152,7 @@ type Orphan struct {
 
 func (x *Orphan) Reset() {
 	*x = Orphan{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[23]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1787,7 +2164,7 @@ func (x *Orphan) String() string {
 func (*Orphan) ProtoMessage() {}
 
 func (x *Orphan) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[23]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1800,7 +2177,7 @@ func (x *Orphan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Orphan.ProtoReflect.Descriptor instead.
 func (*Orphan) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{23}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *Orphan) GetId() string {
@@ -1846,7 +2223,7 @@ type DocCoverage struct {
 
 func (x *DocCoverage) Reset() {
 	*x = DocCoverage{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[24]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1858,7 +2235,7 @@ func (x *DocCoverage) String() string {
 func (*DocCoverage) ProtoMessage() {}
 
 func (x *DocCoverage) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[24]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1871,7 +2248,7 @@ func (x *DocCoverage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DocCoverage.ProtoReflect.Descriptor instead.
 func (*DocCoverage) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{24}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DocCoverage) GetKind() string {
@@ -1924,7 +2301,7 @@ type Answer struct {
 
 func (x *Answer) Reset() {
 	*x = Answer{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[25]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1936,7 +2313,7 @@ func (x *Answer) String() string {
 func (*Answer) ProtoMessage() {}
 
 func (x *Answer) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[25]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1949,7 +2326,7 @@ func (x *Answer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Answer.ProtoReflect.Descriptor instead.
 func (*Answer) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{25}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *Answer) GetVerdict() string {
@@ -1988,7 +2365,7 @@ type SymbolGap struct {
 
 func (x *SymbolGap) Reset() {
 	*x = SymbolGap{}
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[26]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2000,7 +2377,7 @@ func (x *SymbolGap) String() string {
 func (*SymbolGap) ProtoMessage() {}
 
 func (x *SymbolGap) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[26]
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2013,7 +2390,7 @@ func (x *SymbolGap) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SymbolGap.ProtoReflect.Descriptor instead.
 func (*SymbolGap) Descriptor() ([]byte, []int) {
-	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{26}
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *SymbolGap) GetProjectPath() string {
@@ -2167,14 +2544,42 @@ const file_magus_graph_v1alpha1_graph_proto_rawDesc = "" +
 	"\n" +
 	"Dependents\x12\x12\n" +
 	"\x04node\x18\x01 \x01(\tR\x04node\x12\x10\n" +
-	"\x03ids\x18\x02 \x03(\tR\x03ids\")\n" +
+	"\x03ids\x18\x02 \x03(\tR\x03ids\"A\n" +
 	"\x13FindAffectedRequest\x12\x12\n" +
-	"\x04base\x18\x01 \x01(\tR\x04base\"q\n" +
+	"\x04base\x18\x01 \x01(\tR\x04base\x12\x16\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\"\xa3\x02\n" +
 	"\bAffected\x12\x12\n" +
 	"\x04base\x18\x01 \x01(\tR\x04base\x12#\n" +
 	"\rchanged_files\x18\x02 \x01(\x05R\fchangedFiles\x12\x10\n" +
 	"\x03ids\x18\x03 \x03(\tR\x03ids\x12\x1a\n" +
-	"\bfallback\x18\x04 \x01(\tR\bfallback\"v\n" +
+	"\bfallback\x18\x04 \x01(\tR\bfallback\x128\n" +
+	"\x05seeds\x18\x05 \x03(\v2\".magus.graph.v1alpha1.AffectedSeedR\x05seeds\x12>\n" +
+	"\areasons\x18\x06 \x03(\v2$.magus.graph.v1alpha1.AffectedReasonR\areasons\x126\n" +
+	"\x04plan\x18\a \x01(\v2\".magus.graph.v1alpha1.AffectedPlanR\x04plan\"p\n" +
+	"\fAffectedSeed\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
+	"\aproject\x18\x02 \x01(\tR\aproject\x12\x12\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role\x12\x1e\n" +
+	"\n" +
+	"undeclared\x18\x04 \x01(\bR\n" +
+	"undeclared\"q\n" +
+	"\x0eAffectedReason\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04seed\x18\x02 \x01(\bR\x04seed\x12;\n" +
+	"\x06chains\x18\x03 \x03(\v2#.magus.graph.v1alpha1.AffectedChainR\x06chains\"Y\n" +
+	"\rAffectedChain\x12\x12\n" +
+	"\x04seed\x18\x01 \x01(\tR\x04seed\x124\n" +
+	"\x05steps\x18\x02 \x03(\v2\x1e.magus.graph.v1alpha1.PathStepR\x05steps\"\xef\x01\n" +
+	"\fAffectedPlan\x12\x16\n" +
+	"\x06target\x18\x01 \x01(\tR\x06target\x12\x16\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source\x124\n" +
+	"\x05units\x18\x03 \x03(\v2\x1e.magus.graph.v1alpha1.PlanUnitR\x05units\x12<\n" +
+	"\tunreached\x18\x04 \x03(\v2\x1e.magus.graph.v1alpha1.PlanUnitR\tunreached\x12!\n" +
+	"\funbounded_by\x18\x05 \x01(\tR\vunboundedBy\x12\x18\n" +
+	"\acommand\x18\x06 \x01(\tR\acommand\"<\n" +
+	"\bPlanUnit\x12\x18\n" +
+	"\aproject\x18\x01 \x01(\tR\aproject\x12\x16\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\"v\n" +
 	"\x04Path\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
 	"\x02to\x18\x02 \x01(\tR\x02to\x12\x14\n" +
@@ -2257,7 +2662,7 @@ func file_magus_graph_v1alpha1_graph_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_graph_v1alpha1_graph_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_magus_graph_v1alpha1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_magus_graph_v1alpha1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_magus_graph_v1alpha1_graph_proto_goTypes = []any{
 	(EdgeDirection)(0),            // 0: magus.graph.v1alpha1.EdgeDirection
 	(*Graph)(nil),                 // 1: magus.graph.v1alpha1.Graph
@@ -2278,58 +2683,70 @@ var file_magus_graph_v1alpha1_graph_proto_goTypes = []any{
 	(*Dependents)(nil),            // 16: magus.graph.v1alpha1.Dependents
 	(*FindAffectedRequest)(nil),   // 17: magus.graph.v1alpha1.FindAffectedRequest
 	(*Affected)(nil),              // 18: magus.graph.v1alpha1.Affected
-	(*Path)(nil),                  // 19: magus.graph.v1alpha1.Path
-	(*PathStep)(nil),              // 20: magus.graph.v1alpha1.PathStep
-	(*GetGraphStatsRequest)(nil),  // 21: magus.graph.v1alpha1.GetGraphStatsRequest
-	(*GraphStats)(nil),            // 22: magus.graph.v1alpha1.GraphStats
-	(*GodNode)(nil),               // 23: magus.graph.v1alpha1.GodNode
-	(*Orphan)(nil),                // 24: magus.graph.v1alpha1.Orphan
-	(*DocCoverage)(nil),           // 25: magus.graph.v1alpha1.DocCoverage
-	(*Answer)(nil),                // 26: magus.graph.v1alpha1.Answer
-	(*SymbolGap)(nil),             // 27: magus.graph.v1alpha1.SymbolGap
-	nil,                           // 28: magus.graph.v1alpha1.Node.AttrsEntry
-	nil,                           // 29: magus.graph.v1alpha1.Edge.AttrsEntry
+	(*AffectedSeed)(nil),          // 19: magus.graph.v1alpha1.AffectedSeed
+	(*AffectedReason)(nil),        // 20: magus.graph.v1alpha1.AffectedReason
+	(*AffectedChain)(nil),         // 21: magus.graph.v1alpha1.AffectedChain
+	(*AffectedPlan)(nil),          // 22: magus.graph.v1alpha1.AffectedPlan
+	(*PlanUnit)(nil),              // 23: magus.graph.v1alpha1.PlanUnit
+	(*Path)(nil),                  // 24: magus.graph.v1alpha1.Path
+	(*PathStep)(nil),              // 25: magus.graph.v1alpha1.PathStep
+	(*GetGraphStatsRequest)(nil),  // 26: magus.graph.v1alpha1.GetGraphStatsRequest
+	(*GraphStats)(nil),            // 27: magus.graph.v1alpha1.GraphStats
+	(*GodNode)(nil),               // 28: magus.graph.v1alpha1.GodNode
+	(*Orphan)(nil),                // 29: magus.graph.v1alpha1.Orphan
+	(*DocCoverage)(nil),           // 30: magus.graph.v1alpha1.DocCoverage
+	(*Answer)(nil),                // 31: magus.graph.v1alpha1.Answer
+	(*SymbolGap)(nil),             // 32: magus.graph.v1alpha1.SymbolGap
+	nil,                           // 33: magus.graph.v1alpha1.Node.AttrsEntry
+	nil,                           // 34: magus.graph.v1alpha1.Edge.AttrsEntry
 }
 var file_magus_graph_v1alpha1_graph_proto_depIdxs = []int32{
 	2,  // 0: magus.graph.v1alpha1.Graph.nodes:type_name -> magus.graph.v1alpha1.Node
 	3,  // 1: magus.graph.v1alpha1.Graph.links:type_name -> magus.graph.v1alpha1.Edge
-	28, // 2: magus.graph.v1alpha1.Node.attrs:type_name -> magus.graph.v1alpha1.Node.AttrsEntry
-	29, // 3: magus.graph.v1alpha1.Edge.attrs:type_name -> magus.graph.v1alpha1.Edge.AttrsEntry
+	33, // 2: magus.graph.v1alpha1.Node.attrs:type_name -> magus.graph.v1alpha1.Node.AttrsEntry
+	34, // 3: magus.graph.v1alpha1.Edge.attrs:type_name -> magus.graph.v1alpha1.Edge.AttrsEntry
 	5,  // 4: magus.graph.v1alpha1.QueryNodesRequest.position:type_name -> magus.graph.v1alpha1.Position
 	10, // 5: magus.graph.v1alpha1.QueryNodesResponse.matches:type_name -> magus.graph.v1alpha1.Match
 	2,  // 6: magus.graph.v1alpha1.QueryNodesResponse.nodes:type_name -> magus.graph.v1alpha1.Node
 	3,  // 7: magus.graph.v1alpha1.QueryNodesResponse.links:type_name -> magus.graph.v1alpha1.Edge
-	26, // 8: magus.graph.v1alpha1.QueryNodesResponse.answer:type_name -> magus.graph.v1alpha1.Answer
+	31, // 8: magus.graph.v1alpha1.QueryNodesResponse.answer:type_name -> magus.graph.v1alpha1.Answer
 	7,  // 9: magus.graph.v1alpha1.QueryNodesResponse.context:type_name -> magus.graph.v1alpha1.DefinitionSite
 	10, // 10: magus.graph.v1alpha1.ResolveNodesResponse.matches:type_name -> magus.graph.v1alpha1.Match
 	2,  // 11: magus.graph.v1alpha1.NodeContext.node:type_name -> magus.graph.v1alpha1.Node
 	13, // 12: magus.graph.v1alpha1.NodeContext.out:type_name -> magus.graph.v1alpha1.EdgeRef
 	13, // 13: magus.graph.v1alpha1.NodeContext.in:type_name -> magus.graph.v1alpha1.EdgeRef
 	0,  // 14: magus.graph.v1alpha1.EdgeRef.direction:type_name -> magus.graph.v1alpha1.EdgeDirection
-	20, // 15: magus.graph.v1alpha1.Path.steps:type_name -> magus.graph.v1alpha1.PathStep
-	23, // 16: magus.graph.v1alpha1.GraphStats.gods:type_name -> magus.graph.v1alpha1.GodNode
-	24, // 17: magus.graph.v1alpha1.GraphStats.orphans:type_name -> magus.graph.v1alpha1.Orphan
-	25, // 18: magus.graph.v1alpha1.GraphStats.coverage:type_name -> magus.graph.v1alpha1.DocCoverage
-	27, // 19: magus.graph.v1alpha1.Answer.gaps:type_name -> magus.graph.v1alpha1.SymbolGap
-	4,  // 20: magus.graph.v1alpha1.GraphService.QueryNodes:input_type -> magus.graph.v1alpha1.QueryNodesRequest
-	8,  // 21: magus.graph.v1alpha1.GraphService.ResolveNodes:input_type -> magus.graph.v1alpha1.ResolveNodesRequest
-	11, // 22: magus.graph.v1alpha1.GraphService.ExplainNode:input_type -> magus.graph.v1alpha1.ExplainNodeRequest
-	14, // 23: magus.graph.v1alpha1.GraphService.FindPath:input_type -> magus.graph.v1alpha1.FindPathRequest
-	15, // 24: magus.graph.v1alpha1.GraphService.FindDependents:input_type -> magus.graph.v1alpha1.FindDependentsRequest
-	17, // 25: magus.graph.v1alpha1.GraphService.FindAffected:input_type -> magus.graph.v1alpha1.FindAffectedRequest
-	21, // 26: magus.graph.v1alpha1.GraphService.GetGraphStats:input_type -> magus.graph.v1alpha1.GetGraphStatsRequest
-	6,  // 27: magus.graph.v1alpha1.GraphService.QueryNodes:output_type -> magus.graph.v1alpha1.QueryNodesResponse
-	9,  // 28: magus.graph.v1alpha1.GraphService.ResolveNodes:output_type -> magus.graph.v1alpha1.ResolveNodesResponse
-	12, // 29: magus.graph.v1alpha1.GraphService.ExplainNode:output_type -> magus.graph.v1alpha1.NodeContext
-	19, // 30: magus.graph.v1alpha1.GraphService.FindPath:output_type -> magus.graph.v1alpha1.Path
-	16, // 31: magus.graph.v1alpha1.GraphService.FindDependents:output_type -> magus.graph.v1alpha1.Dependents
-	18, // 32: magus.graph.v1alpha1.GraphService.FindAffected:output_type -> magus.graph.v1alpha1.Affected
-	22, // 33: magus.graph.v1alpha1.GraphService.GetGraphStats:output_type -> magus.graph.v1alpha1.GraphStats
-	27, // [27:34] is the sub-list for method output_type
-	20, // [20:27] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	19, // 15: magus.graph.v1alpha1.Affected.seeds:type_name -> magus.graph.v1alpha1.AffectedSeed
+	20, // 16: magus.graph.v1alpha1.Affected.reasons:type_name -> magus.graph.v1alpha1.AffectedReason
+	22, // 17: magus.graph.v1alpha1.Affected.plan:type_name -> magus.graph.v1alpha1.AffectedPlan
+	21, // 18: magus.graph.v1alpha1.AffectedReason.chains:type_name -> magus.graph.v1alpha1.AffectedChain
+	25, // 19: magus.graph.v1alpha1.AffectedChain.steps:type_name -> magus.graph.v1alpha1.PathStep
+	23, // 20: magus.graph.v1alpha1.AffectedPlan.units:type_name -> magus.graph.v1alpha1.PlanUnit
+	23, // 21: magus.graph.v1alpha1.AffectedPlan.unreached:type_name -> magus.graph.v1alpha1.PlanUnit
+	25, // 22: magus.graph.v1alpha1.Path.steps:type_name -> magus.graph.v1alpha1.PathStep
+	28, // 23: magus.graph.v1alpha1.GraphStats.gods:type_name -> magus.graph.v1alpha1.GodNode
+	29, // 24: magus.graph.v1alpha1.GraphStats.orphans:type_name -> magus.graph.v1alpha1.Orphan
+	30, // 25: magus.graph.v1alpha1.GraphStats.coverage:type_name -> magus.graph.v1alpha1.DocCoverage
+	32, // 26: magus.graph.v1alpha1.Answer.gaps:type_name -> magus.graph.v1alpha1.SymbolGap
+	4,  // 27: magus.graph.v1alpha1.GraphService.QueryNodes:input_type -> magus.graph.v1alpha1.QueryNodesRequest
+	8,  // 28: magus.graph.v1alpha1.GraphService.ResolveNodes:input_type -> magus.graph.v1alpha1.ResolveNodesRequest
+	11, // 29: magus.graph.v1alpha1.GraphService.ExplainNode:input_type -> magus.graph.v1alpha1.ExplainNodeRequest
+	14, // 30: magus.graph.v1alpha1.GraphService.FindPath:input_type -> magus.graph.v1alpha1.FindPathRequest
+	15, // 31: magus.graph.v1alpha1.GraphService.FindDependents:input_type -> magus.graph.v1alpha1.FindDependentsRequest
+	17, // 32: magus.graph.v1alpha1.GraphService.FindAffected:input_type -> magus.graph.v1alpha1.FindAffectedRequest
+	26, // 33: magus.graph.v1alpha1.GraphService.GetGraphStats:input_type -> magus.graph.v1alpha1.GetGraphStatsRequest
+	6,  // 34: magus.graph.v1alpha1.GraphService.QueryNodes:output_type -> magus.graph.v1alpha1.QueryNodesResponse
+	9,  // 35: magus.graph.v1alpha1.GraphService.ResolveNodes:output_type -> magus.graph.v1alpha1.ResolveNodesResponse
+	12, // 36: magus.graph.v1alpha1.GraphService.ExplainNode:output_type -> magus.graph.v1alpha1.NodeContext
+	24, // 37: magus.graph.v1alpha1.GraphService.FindPath:output_type -> magus.graph.v1alpha1.Path
+	16, // 38: magus.graph.v1alpha1.GraphService.FindDependents:output_type -> magus.graph.v1alpha1.Dependents
+	18, // 39: magus.graph.v1alpha1.GraphService.FindAffected:output_type -> magus.graph.v1alpha1.Affected
+	27, // 40: magus.graph.v1alpha1.GraphService.GetGraphStats:output_type -> magus.graph.v1alpha1.GraphStats
+	34, // [34:41] is the sub-list for method output_type
+	27, // [27:34] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_magus_graph_v1alpha1_graph_proto_init() }
@@ -2343,7 +2760,7 @@ func file_magus_graph_v1alpha1_graph_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_graph_v1alpha1_graph_proto_rawDesc), len(file_magus_graph_v1alpha1_graph_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   29,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

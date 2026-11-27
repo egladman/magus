@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/graph/v1alpha1/graph.proto.
  */
 export const file_magus_graph_v1alpha1_graph: GenFile = /*@__PURE__*/
-  fileDesc("CiBtYWd1cy9ncmFwaC92MWFscGhhMS9ncmFwaC5wcm90bxIUbWFndXMuZ3JhcGgudjFhbHBoYTEi/wEKBUdyYXBoEhIKCmRlZmluaXRpb24YASABKAkSEwoLYXBpX3ZlcnNpb24YCiABKAkSEAoIZGlyZWN0ZWQYAyABKAgSEgoKbXVsdGlncmFwaBgEIAEoCBISCgpub2RlX2NvdW50GAUgASgFEhIKCmVkZ2VfY291bnQYBiABKAUSEwoLc291cmNlX2Jhc2UYByABKAkSKQoFbm9kZXMYCCADKAsyGi5tYWd1cy5ncmFwaC52MWFscGhhMS5Ob2RlEikKBWxpbmtzGAkgAygLMhoubWFndXMuZ3JhcGgudjFhbHBoYTEuRWRnZUoECAIQA1IOc2NoZW1hX3ZlcnNpb24isAEKBE5vZGUSCgoCaWQYASABKAkSDAoEa2luZBgCIAEoCRINCgVsYWJlbBgDIAEoCRILCgNkb2MYBCABKAkSDgoGc291cmNlGAUgASgJEjQKBWF0dHJzGAYgAygLMiUubWFndXMuZ3JhcGgudjFhbHBoYTEuTm9kZS5BdHRyc0VudHJ5GiwKCkF0dHJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLTAQoERWRnZRIOCgZzb3VyY2UYASABKAkSDgoGdGFyZ2V0GAIgASgJEhAKCHJlbGF0aW9uGAMgASgJEhIKCmNvbmZpZGVuY2UYBCABKAkSDQoFc2NvcmUYBSABKAESEgoKcHJvdmVuYW5jZRgGIAEoCRI0CgVhdHRycxgHIAMoCzIlLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkVkZ2UuQXR0cnNFbnRyeRosCgpBdHRyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEingEKEVF1ZXJ5Tm9kZXNSZXF1ZXN0Eg0KBXF1ZXJ5GAEgASgJEg4KBmJ1ZGdldBgCIAEoBRIOCgZvZmZzZXQYAyABKAUSEQoJcGFnZV9zaXplGAQgASgFEjAKCHBvc2l0aW9uGAUgASgLMh4ubWFndXMuZ3JhcGgudjFhbHBoYTEuUG9zaXRpb24SFQoNZXhjbHVkZV9wYXRocxgGIAMoCSJICghQb3NpdGlvbhIMCgRwYXRoGAEgASgJEg4KBm9mZnNldBgCIAEoDRIOCgZwcmVmaXgYAyABKAkSDgoGc3VmZml4GAQgASgJIsECChJRdWVyeU5vZGVzUmVzcG9uc2USDQoFcXVlcnkYASABKAkSDgoGYnVkZ2V0GAIgASgFEhMKC21hdGNoX2NvdW50GAMgASgFEg4KBm9mZnNldBgEIAEoBRIsCgdtYXRjaGVzGAUgAygLMhsubWFndXMuZ3JhcGgudjFhbHBoYTEuTWF0Y2gSKQoFbm9kZXMYBiADKAsyGi5tYWd1cy5ncmFwaC52MWFscGhhMS5Ob2RlEikKBWxpbmtzGAcgAygLMhoubWFndXMuZ3JhcGgudjFhbHBoYTEuRWRnZRIsCgZhbnN3ZXIYCCABKAsyHC5tYWd1cy5ncmFwaC52MWFscGhhMS5BbnN3ZXISNQoHY29udGV4dBgJIAMoCzIkLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkRlZmluaXRpb25TaXRlIqEBCg5EZWZpbml0aW9uU2l0ZRIMCgRmaWxlGAEgASgJEhIKCnN0YXJ0X2xpbmUYAiABKAUSEAoIZW5kX2xpbmUYAyABKAUSDgoGc3RhdHVzGAQgASgJEg4KBnNvdXJjZRgFIAEoCRIZChFzb3VyY2Vfc3RhcnRfbGluZRgGIAEoBRIOCgZzeW1ib2wYByABKAkSEAoIbWF0Y2hfaWQYCCABKAkiNwoTUmVzb2x2ZU5vZGVzUmVxdWVzdBIRCglyZWZlcmVuY2UYASABKAkSDQoFbGltaXQYAiABKAUiRAoUUmVzb2x2ZU5vZGVzUmVzcG9uc2USLAoHbWF0Y2hlcxgBIAMoCzIbLm1hZ3VzLmdyYXBoLnYxYWxwaGExLk1hdGNoImcKBU1hdGNoEgoKAmlkGAEgASgJEgwKBGtpbmQYAiABKAkSDQoFbGFiZWwYAyABKAkSDQoFc2NvcmUYBCABKAUSEQoJc3RhbGVuZXNzGAUgASgJEhMKC291dHJ1bl9kYXlzGAYgASgFIiIKEkV4cGxhaW5Ob2RlUmVxdWVzdBIMCgRuYW1lGAEgASgJIqQBCgtOb2RlQ29udGV4dBIoCgRub2RlGAEgASgLMhoubWFndXMuZ3JhcGgudjFhbHBoYTEuTm9kZRIUCgxibGFzdF9yYWRpdXMYAiABKAUSKgoDb3V0GAMgAygLMh0ubWFndXMuZ3JhcGgudjFhbHBoYTEuRWRnZVJlZhIpCgJpbhgEIAMoCzIdLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkVkZ2VSZWYinwEKB0VkZ2VSZWYSEAoIcmVsYXRpb24YASABKAkSNgoJZGlyZWN0aW9uGAIgASgOMiMubWFndXMuZ3JhcGgudjFhbHBoYTEuRWRnZURpcmVjdGlvbhINCgVvdGhlchgDIAEoCRISCgpvdGhlcl9raW5kGAQgASgJEhMKC290aGVyX2xhYmVsGAUgASgJEhIKCnByb3ZlbmFuY2UYBiABKAkiKwoPRmluZFBhdGhSZXF1ZXN0EgwKBGZyb20YASABKAkSCgoCdG8YAiABKAkiJQoVRmluZERlcGVuZGVudHNSZXF1ZXN0EgwKBG5hbWUYASABKAkiJwoKRGVwZW5kZW50cxIMCgRub2RlGAEgASgJEgsKA2lkcxgCIAMoCSIjChNGaW5kQWZmZWN0ZWRSZXF1ZXN0EgwKBGJhc2UYASABKAkiTgoIQWZmZWN0ZWQSDAoEYmFzZRgBIAEoCRIVCg1jaGFuZ2VkX2ZpbGVzGAIgASgFEgsKA2lkcxgDIAMoCRIQCghmYWxsYmFjaxgEIAEoCSJeCgRQYXRoEgwKBGZyb20YASABKAkSCgoCdG8YAiABKAkSDQoFZm91bmQYAyABKAgSLQoFc3RlcHMYBCADKAsyHi5tYWd1cy5ncmFwaC52MWFscGhhMS5QYXRoU3RlcCJHCghQYXRoU3RlcBIMCgRmcm9tGAEgASgJEgoKAnRvGAIgASgJEhAKCHJlbGF0aW9uGAMgASgJEg8KB2ZvcndhcmQYBCABKAgiJAoUR2V0R3JhcGhTdGF0c1JlcXVlc3QSDAoEa2luZBgBIAEoCSKWAgoKR3JhcGhTdGF0cxISCgpub2RlX2NvdW50GAEgASgFEhIKCmVkZ2VfY291bnQYAiABKAUSKwoEZ29kcxgDIAMoCzIdLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkdvZE5vZGUSLQoHb3JwaGFucxgEIAMoCzIcLm1hZ3VzLmdyYXBoLnYxYWxwaGExLk9ycGhhbhIzCghjb3ZlcmFnZRgFIAMoCzIhLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkRvY0NvdmVyYWdlEhYKDmlzb2xhdGVkX2NvdW50GAYgASgFEhcKD2NvbXBvbmVudF9jb3VudBgHIAEoBRIeChZsYXJnZXN0X2NvbXBvbmVudF9zaXplGAggASgFIlsKB0dvZE5vZGUSCgoCaWQYASABKAkSDAoEa2luZBgCIAEoCRINCgVsYWJlbBgDIAEoCRIOCgZkZWdyZWUYBCABKAUSCgoCaW4YBSABKAUSCwoDb3V0GAYgASgFIkEKBk9ycGhhbhIKCgJpZBgBIAEoCRIMCgRraW5kGAIgASgJEg0KBWxhYmVsGAMgASgJEg4KBnJlYXNvbhgEIAEoCSJlCgtEb2NDb3ZlcmFnZRIMCgRraW5kGAEgASgJEg0KBXRvdGFsGAIgASgFEhIKCmRvY3VtZW50ZWQYAyABKAUSDwoHcGVyY2VudBgEIAEoBRIUCgx1bmRvY3VtZW50ZWQYBSADKAkiWAoGQW5zd2VyEg8KB3ZlcmRpY3QYASABKAkSDgoGcmVhc29uGAIgASgJEi0KBGdhcHMYAyADKAsyHy5tYWd1cy5ncmFwaC52MWFscGhhMS5TeW1ib2xHYXAiVgoJU3ltYm9sR2FwEhQKDHByb2plY3RfcGF0aBgBIAEoCRIUCgxwcm9qZWN0X25hbWUYAiABKAkSDQoFc3RhdGUYAyABKAkSDgoGZGV0YWlsGAQgASgJKl4KDUVkZ2VEaXJlY3Rpb24SHgoaRURHRV9ESVJFQ1RJT05fVU5TUEVDSUZJRUQQABIWChJFREdFX0RJUkVDVElPTl9PVVQQARIVChFFREdFX0RJUkVDVElPTl9JThACMpwFCgxHcmFwaFNlcnZpY2USXwoKUXVlcnlOb2RlcxInLm1hZ3VzLmdyYXBoLnYxYWxwaGExLlF1ZXJ5Tm9kZXNSZXF1ZXN0GigubWFndXMuZ3JhcGgudjFhbHBoYTEuUXVlcnlOb2Rlc1Jlc3BvbnNlEmUKDFJlc29sdmVOb2RlcxIpLm1hZ3VzLmdyYXBoLnYxYWxwaGExLlJlc29sdmVOb2Rlc1JlcXVlc3QaKi5tYWd1cy5ncmFwaC52MWFscGhhMS5SZXNvbHZlTm9kZXNSZXNwb25zZRJaCgtFeHBsYWluTm9kZRIoLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkV4cGxhaW5Ob2RlUmVxdWVzdBohLm1hZ3VzLmdyYXBoLnYxYWxwaGExLk5vZGVDb250ZXh0Ek0KCEZpbmRQYXRoEiUubWFndXMuZ3JhcGgudjFhbHBoYTEuRmluZFBhdGhSZXF1ZXN0GhoubWFndXMuZ3JhcGgudjFhbHBoYTEuUGF0aBJfCg5GaW5kRGVwZW5kZW50cxIrLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkZpbmREZXBlbmRlbnRzUmVxdWVzdBogLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkRlcGVuZGVudHMSWQoMRmluZEFmZmVjdGVkEikubWFndXMuZ3JhcGgudjFhbHBoYTEuRmluZEFmZmVjdGVkUmVxdWVzdBoeLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkFmZmVjdGVkEl0KDUdldEdyYXBoU3RhdHMSKi5tYWd1cy5ncmFwaC52MWFscGhhMS5HZXRHcmFwaFN0YXRzUmVxdWVzdBogLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkdyYXBoU3RhdHNC4wEKGGNvbS5tYWd1cy5ncmFwaC52MWFscGhhMUIKR3JhcGhQcm90b1ABWklnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9ncmFwaC92MWFscGhhMTtncmFwaHYxYWxwaGExogIDTUdYqgIUTWFndXMuR3JhcGguVjFhbHBoYTHKAhRNYWd1c1xHcmFwaFxWMWFscGhhMeICIE1hZ3VzXEdyYXBoXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIWTWFndXM6OkdyYXBoOjpWMWFscGhhMWIGcHJvdG8z");
+  fileDesc("CiBtYWd1cy9ncmFwaC92MWFscGhhMS9ncmFwaC5wcm90bxIUbWFndXMuZ3JhcGgudjFhbHBoYTEi/wEKBUdyYXBoEhIKCmRlZmluaXRpb24YASABKAkSEwoLYXBpX3ZlcnNpb24YCiABKAkSEAoIZGlyZWN0ZWQYAyABKAgSEgoKbXVsdGlncmFwaBgEIAEoCBISCgpub2RlX2NvdW50GAUgASgFEhIKCmVkZ2VfY291bnQYBiABKAUSEwoLc291cmNlX2Jhc2UYByABKAkSKQoFbm9kZXMYCCADKAsyGi5tYWd1cy5ncmFwaC52MWFscGhhMS5Ob2RlEikKBWxpbmtzGAkgAygLMhoubWFndXMuZ3JhcGgudjFhbHBoYTEuRWRnZUoECAIQA1IOc2NoZW1hX3ZlcnNpb24isAEKBE5vZGUSCgoCaWQYASABKAkSDAoEa2luZBgCIAEoCRINCgVsYWJlbBgDIAEoCRILCgNkb2MYBCABKAkSDgoGc291cmNlGAUgASgJEjQKBWF0dHJzGAYgAygLMiUubWFndXMuZ3JhcGgudjFhbHBoYTEuTm9kZS5BdHRyc0VudHJ5GiwKCkF0dHJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLTAQoERWRnZRIOCgZzb3VyY2UYASABKAkSDgoGdGFyZ2V0GAIgASgJEhAKCHJlbGF0aW9uGAMgASgJEhIKCmNvbmZpZGVuY2UYBCABKAkSDQoFc2NvcmUYBSABKAESEgoKcHJvdmVuYW5jZRgGIAEoCRI0CgVhdHRycxgHIAMoCzIlLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkVkZ2UuQXR0cnNFbnRyeRosCgpBdHRyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEingEKEVF1ZXJ5Tm9kZXNSZXF1ZXN0Eg0KBXF1ZXJ5GAEgASgJEg4KBmJ1ZGdldBgCIAEoBRIOCgZvZmZzZXQYAyABKAUSEQoJcGFnZV9zaXplGAQgASgFEjAKCHBvc2l0aW9uGAUgASgLMh4ubWFndXMuZ3JhcGgudjFhbHBoYTEuUG9zaXRpb24SFQoNZXhjbHVkZV9wYXRocxgGIAMoCSJICghQb3NpdGlvbhIMCgRwYXRoGAEgASgJEg4KBm9mZnNldBgCIAEoDRIOCgZwcmVmaXgYAyABKAkSDgoGc3VmZml4GAQgASgJIsECChJRdWVyeU5vZGVzUmVzcG9uc2USDQoFcXVlcnkYASABKAkSDgoGYnVkZ2V0GAIgASgFEhMKC21hdGNoX2NvdW50GAMgASgFEg4KBm9mZnNldBgEIAEoBRIsCgdtYXRjaGVzGAUgAygLMhsubWFndXMuZ3JhcGgudjFhbHBoYTEuTWF0Y2gSKQoFbm9kZXMYBiADKAsyGi5tYWd1cy5ncmFwaC52MWFscGhhMS5Ob2RlEikKBWxpbmtzGAcgAygLMhoubWFndXMuZ3JhcGgudjFhbHBoYTEuRWRnZRIsCgZhbnN3ZXIYCCABKAsyHC5tYWd1cy5ncmFwaC52MWFscGhhMS5BbnN3ZXISNQoHY29udGV4dBgJIAMoCzIkLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkRlZmluaXRpb25TaXRlIqEBCg5EZWZpbml0aW9uU2l0ZRIMCgRmaWxlGAEgASgJEhIKCnN0YXJ0X2xpbmUYAiABKAUSEAoIZW5kX2xpbmUYAyABKAUSDgoGc3RhdHVzGAQgASgJEg4KBnNvdXJjZRgFIAEoCRIZChFzb3VyY2Vfc3RhcnRfbGluZRgGIAEoBRIOCgZzeW1ib2wYByABKAkSEAoIbWF0Y2hfaWQYCCABKAkiNwoTUmVzb2x2ZU5vZGVzUmVxdWVzdBIRCglyZWZlcmVuY2UYASABKAkSDQoFbGltaXQYAiABKAUiRAoUUmVzb2x2ZU5vZGVzUmVzcG9uc2USLAoHbWF0Y2hlcxgBIAMoCzIbLm1hZ3VzLmdyYXBoLnYxYWxwaGExLk1hdGNoImcKBU1hdGNoEgoKAmlkGAEgASgJEgwKBGtpbmQYAiABKAkSDQoFbGFiZWwYAyABKAkSDQoFc2NvcmUYBCABKAUSEQoJc3RhbGVuZXNzGAUgASgJEhMKC291dHJ1bl9kYXlzGAYgASgFIiIKEkV4cGxhaW5Ob2RlUmVxdWVzdBIMCgRuYW1lGAEgASgJIqQBCgtOb2RlQ29udGV4dBIoCgRub2RlGAEgASgLMhoubWFndXMuZ3JhcGgudjFhbHBoYTEuTm9kZRIUCgxibGFzdF9yYWRpdXMYAiABKAUSKgoDb3V0GAMgAygLMh0ubWFndXMuZ3JhcGgudjFhbHBoYTEuRWRnZVJlZhIpCgJpbhgEIAMoCzIdLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkVkZ2VSZWYinwEKB0VkZ2VSZWYSEAoIcmVsYXRpb24YASABKAkSNgoJZGlyZWN0aW9uGAIgASgOMiMubWFndXMuZ3JhcGgudjFhbHBoYTEuRWRnZURpcmVjdGlvbhINCgVvdGhlchgDIAEoCRISCgpvdGhlcl9raW5kGAQgASgJEhMKC290aGVyX2xhYmVsGAUgASgJEhIKCnByb3ZlbmFuY2UYBiABKAkiKwoPRmluZFBhdGhSZXF1ZXN0EgwKBGZyb20YASABKAkSCgoCdG8YAiABKAkiJQoVRmluZERlcGVuZGVudHNSZXF1ZXN0EgwKBG5hbWUYASABKAkiJwoKRGVwZW5kZW50cxIMCgRub2RlGAEgASgJEgsKA2lkcxgCIAMoCSIzChNGaW5kQWZmZWN0ZWRSZXF1ZXN0EgwKBGJhc2UYASABKAkSDgoGdGFyZ2V0GAIgASgJIuoBCghBZmZlY3RlZBIMCgRiYXNlGAEgASgJEhUKDWNoYW5nZWRfZmlsZXMYAiABKAUSCwoDaWRzGAMgAygJEhAKCGZhbGxiYWNrGAQgASgJEjEKBXNlZWRzGAUgAygLMiIubWFndXMuZ3JhcGgudjFhbHBoYTEuQWZmZWN0ZWRTZWVkEjUKB3JlYXNvbnMYBiADKAsyJC5tYWd1cy5ncmFwaC52MWFscGhhMS5BZmZlY3RlZFJlYXNvbhIwCgRwbGFuGAcgASgLMiIubWFndXMuZ3JhcGgudjFhbHBoYTEuQWZmZWN0ZWRQbGFuIk8KDEFmZmVjdGVkU2VlZBIMCgRwYXRoGAEgASgJEg8KB3Byb2plY3QYAiABKAkSDAoEcm9sZRgDIAEoCRISCgp1bmRlY2xhcmVkGAQgASgIIl8KDkFmZmVjdGVkUmVhc29uEgoKAmlkGAEgASgJEgwKBHNlZWQYAiABKAgSMwoGY2hhaW5zGAMgAygLMiMubWFndXMuZ3JhcGgudjFhbHBoYTEuQWZmZWN0ZWRDaGFpbiJMCg1BZmZlY3RlZENoYWluEgwKBHNlZWQYASABKAkSLQoFc3RlcHMYAiADKAsyHi5tYWd1cy5ncmFwaC52MWFscGhhMS5QYXRoU3RlcCK3AQoMQWZmZWN0ZWRQbGFuEg4KBnRhcmdldBgBIAEoCRIOCgZzb3VyY2UYAiABKAkSLQoFdW5pdHMYAyADKAsyHi5tYWd1cy5ncmFwaC52MWFscGhhMS5QbGFuVW5pdBIxCgl1bnJlYWNoZWQYBCADKAsyHi5tYWd1cy5ncmFwaC52MWFscGhhMS5QbGFuVW5pdBIUCgx1bmJvdW5kZWRfYnkYBSABKAkSDwoHY29tbWFuZBgGIAEoCSIrCghQbGFuVW5pdBIPCgdwcm9qZWN0GAEgASgJEg4KBnRhcmdldBgCIAEoCSJeCgRQYXRoEgwKBGZyb20YASABKAkSCgoCdG8YAiABKAkSDQoFZm91bmQYAyABKAgSLQoFc3RlcHMYBCADKAsyHi5tYWd1cy5ncmFwaC52MWFscGhhMS5QYXRoU3RlcCJHCghQYXRoU3RlcBIMCgRmcm9tGAEgASgJEgoKAnRvGAIgASgJEhAKCHJlbGF0aW9uGAMgASgJEg8KB2ZvcndhcmQYBCABKAgiJAoUR2V0R3JhcGhTdGF0c1JlcXVlc3QSDAoEa2luZBgBIAEoCSKWAgoKR3JhcGhTdGF0cxISCgpub2RlX2NvdW50GAEgASgFEhIKCmVkZ2VfY291bnQYAiABKAUSKwoEZ29kcxgDIAMoCzIdLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkdvZE5vZGUSLQoHb3JwaGFucxgEIAMoCzIcLm1hZ3VzLmdyYXBoLnYxYWxwaGExLk9ycGhhbhIzCghjb3ZlcmFnZRgFIAMoCzIhLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkRvY0NvdmVyYWdlEhYKDmlzb2xhdGVkX2NvdW50GAYgASgFEhcKD2NvbXBvbmVudF9jb3VudBgHIAEoBRIeChZsYXJnZXN0X2NvbXBvbmVudF9zaXplGAggASgFIlsKB0dvZE5vZGUSCgoCaWQYASABKAkSDAoEa2luZBgCIAEoCRINCgVsYWJlbBgDIAEoCRIOCgZkZWdyZWUYBCABKAUSCgoCaW4YBSABKAUSCwoDb3V0GAYgASgFIkEKBk9ycGhhbhIKCgJpZBgBIAEoCRIMCgRraW5kGAIgASgJEg0KBWxhYmVsGAMgASgJEg4KBnJlYXNvbhgEIAEoCSJlCgtEb2NDb3ZlcmFnZRIMCgRraW5kGAEgASgJEg0KBXRvdGFsGAIgASgFEhIKCmRvY3VtZW50ZWQYAyABKAUSDwoHcGVyY2VudBgEIAEoBRIUCgx1bmRvY3VtZW50ZWQYBSADKAkiWAoGQW5zd2VyEg8KB3ZlcmRpY3QYASABKAkSDgoGcmVhc29uGAIgASgJEi0KBGdhcHMYAyADKAsyHy5tYWd1cy5ncmFwaC52MWFscGhhMS5TeW1ib2xHYXAiVgoJU3ltYm9sR2FwEhQKDHByb2plY3RfcGF0aBgBIAEoCRIUCgxwcm9qZWN0X25hbWUYAiABKAkSDQoFc3RhdGUYAyABKAkSDgoGZGV0YWlsGAQgASgJKl4KDUVkZ2VEaXJlY3Rpb24SHgoaRURHRV9ESVJFQ1RJT05fVU5TUEVDSUZJRUQQABIWChJFREdFX0RJUkVDVElPTl9PVVQQARIVChFFREdFX0RJUkVDVElPTl9JThACMpwFCgxHcmFwaFNlcnZpY2USXwoKUXVlcnlOb2RlcxInLm1hZ3VzLmdyYXBoLnYxYWxwaGExLlF1ZXJ5Tm9kZXNSZXF1ZXN0GigubWFndXMuZ3JhcGgudjFhbHBoYTEuUXVlcnlOb2Rlc1Jlc3BvbnNlEmUKDFJlc29sdmVOb2RlcxIpLm1hZ3VzLmdyYXBoLnYxYWxwaGExLlJlc29sdmVOb2Rlc1JlcXVlc3QaKi5tYWd1cy5ncmFwaC52MWFscGhhMS5SZXNvbHZlTm9kZXNSZXNwb25zZRJaCgtFeHBsYWluTm9kZRIoLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkV4cGxhaW5Ob2RlUmVxdWVzdBohLm1hZ3VzLmdyYXBoLnYxYWxwaGExLk5vZGVDb250ZXh0Ek0KCEZpbmRQYXRoEiUubWFndXMuZ3JhcGgudjFhbHBoYTEuRmluZFBhdGhSZXF1ZXN0GhoubWFndXMuZ3JhcGgudjFhbHBoYTEuUGF0aBJfCg5GaW5kRGVwZW5kZW50cxIrLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkZpbmREZXBlbmRlbnRzUmVxdWVzdBogLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkRlcGVuZGVudHMSWQoMRmluZEFmZmVjdGVkEikubWFndXMuZ3JhcGgudjFhbHBoYTEuRmluZEFmZmVjdGVkUmVxdWVzdBoeLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkFmZmVjdGVkEl0KDUdldEdyYXBoU3RhdHMSKi5tYWd1cy5ncmFwaC52MWFscGhhMS5HZXRHcmFwaFN0YXRzUmVxdWVzdBogLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkdyYXBoU3RhdHNC4wEKGGNvbS5tYWd1cy5ncmFwaC52MWFscGhhMUIKR3JhcGhQcm90b1ABWklnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9ncmFwaC92MWFscGhhMTtncmFwaHYxYWxwaGExogIDTUdYqgIUTWFndXMuR3JhcGguVjFhbHBoYTHKAhRNYWd1c1xHcmFwaFxWMWFscGhhMeICIE1hZ3VzXEdyYXBoXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIWTWFndXM6OkdyYXBoOjpWMWFscGhhMWIGcHJvdG8z");
 
 /**
  * Graph is a knowledge-graph projection: nodes, edges (links), and shape metadata.
@@ -679,6 +679,14 @@ export type FindAffectedRequest = Message<"magus.graph.v1alpha1.FindAffectedRequ
    * @generated from field: string base = 1;
    */
   base: string;
+
+  /**
+   * target is the target the plan runs, as `magus affected <target> --plan` takes it. Empty
+   * plans `ci`, the run `magus affected --impact` names as its follow-up; the plan echoes it.
+   *
+   * @generated from field: string target = 2;
+   */
+  target: string;
 };
 
 /**
@@ -689,7 +697,8 @@ export const FindAffectedRequestSchema: GenMessage<FindAffectedRequest> = /*@__P
   messageDesc(file_magus_graph_v1alpha1_graph, 16);
 
 /**
- * Affected is the reach of one VCS diff: which projects a change forces work in.
+ * Affected is the reach of one VCS diff: which projects a change forces work in, why, and what
+ * runs over them.
  *
  * @generated from message magus.graph.v1alpha1.Affected
  */
@@ -717,12 +726,35 @@ export type Affected = Message<"magus.graph.v1alpha1.Affected"> & {
 
   /**
    * fallback is why the answer is not definitive: a shallow clone, no VCS, an unreadable base.
-   * ids is empty whenever it is set, and the two are read together - an empty ids with no
-   * fallback means the diff genuinely reaches nothing, which is a real answer.
+   * ids, seeds, reasons and plan are empty whenever it is set, and the two are read together -
+   * an empty ids with no fallback means the diff genuinely reaches nothing, which is a real
+   * answer.
    *
    * @generated from field: string fallback = 4;
    */
   fallback: string;
+
+  /**
+   * seeds are the paths the diff carried, sorted, each with the project that owns it.
+   *
+   * @generated from field: repeated magus.graph.v1alpha1.AffectedSeed seeds = 5;
+   */
+  seeds: AffectedSeed[];
+
+  /**
+   * reasons says why each project in ids is there, in ids order: `magus affected --explain`
+   * for every project at once.
+   *
+   * @generated from field: repeated magus.graph.v1alpha1.AffectedReason reasons = 6;
+   */
+  reasons: AffectedReason[];
+
+  /**
+   * plan is what runs over the set: `magus affected <target> --plan`, flattened to its units.
+   *
+   * @generated from field: magus.graph.v1alpha1.AffectedPlan plan = 7;
+   */
+  plan?: AffectedPlan;
 };
 
 /**
@@ -731,6 +763,203 @@ export type Affected = Message<"magus.graph.v1alpha1.Affected"> & {
  */
 export const AffectedSchema: GenMessage<Affected> = /*@__PURE__*/
   messageDesc(file_magus_graph_v1alpha1_graph, 17);
+
+/**
+ * AffectedSeed is one changed path and what it seeds.
+ *
+ * @generated from message magus.graph.v1alpha1.AffectedSeed
+ */
+export type AffectedSeed = Message<"magus.graph.v1alpha1.AffectedSeed"> & {
+  /**
+   * workspace-relative, slash-separated
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * project is the project node id the affected set charged the path to; empty when the path
+   * sits outside every project and seeds nothing.
+   *
+   * @generated from field: string project = 2;
+   */
+  project: string;
+
+  /**
+   * role is the path's role as `magus describe file` gives it: "output" (generated: regenerate
+   * it, never hand-edit), "source", "maintained" or "unclaimed".
+   *
+   * @generated from field: string role = 3;
+   */
+  role: string;
+
+  /**
+   * undeclared is true when no project declares the path, so it seeds its project by
+   * directory containment alone and moves no cache key.
+   *
+   * @generated from field: bool undeclared = 4;
+   */
+  undeclared: boolean;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.AffectedSeed.
+ * Use `create(AffectedSeedSchema)` to create a new message.
+ */
+export const AffectedSeedSchema: GenMessage<AffectedSeed> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 18);
+
+/**
+ * AffectedReason is why one project is in the affected set.
+ *
+ * @generated from message magus.graph.v1alpha1.AffectedReason
+ */
+export type AffectedReason = Message<"magus.graph.v1alpha1.AffectedReason"> & {
+  /**
+   * the project node id, as it appears in ids
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * a changed path sits in the project itself
+   *
+   * @generated from field: bool seed = 2;
+   */
+  seed: boolean;
+
+  /**
+   * chains are the shortest chain from each seed that reaches the project.
+   *
+   * @generated from field: repeated magus.graph.v1alpha1.AffectedChain chains = 3;
+   */
+  chains: AffectedChain[];
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.AffectedReason.
+ * Use `create(AffectedReasonSchema)` to create a new message.
+ */
+export const AffectedReasonSchema: GenMessage<AffectedReason> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 19);
+
+/**
+ * AffectedChain is one route a change took from its seed to a project.
+ *
+ * @generated from message magus.graph.v1alpha1.AffectedChain
+ */
+export type AffectedChain = Message<"magus.graph.v1alpha1.AffectedChain"> & {
+  /**
+   * the project node id holding the changed paths
+   *
+   * @generated from field: string seed = 1;
+   */
+  seed: string;
+
+  /**
+   * steps walk from the seed to the project, each a depends_on edge walked against its own
+   * direction (forward=false), since the dependent is the edge's source. Empty when the
+   * project is the seed.
+   *
+   * @generated from field: repeated magus.graph.v1alpha1.PathStep steps = 2;
+   */
+  steps: PathStep[];
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.AffectedChain.
+ * Use `create(AffectedChainSchema)` to create a new message.
+ */
+export const AffectedChainSchema: GenMessage<AffectedChain> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 20);
+
+/**
+ * AffectedPlan is the shard plan for one target over the affected set, flattened: a viewer
+ * asks what runs, not how it packs onto runners.
+ *
+ * @generated from message magus.graph.v1alpha1.AffectedPlan
+ */
+export type AffectedPlan = Message<"magus.graph.v1alpha1.AffectedPlan"> & {
+  /**
+   * the target planned
+   *
+   * @generated from field: string target = 1;
+   */
+  target: string;
+
+  /**
+   * what the plan computed the set from, e.g. "git diff vs origin/main"
+   *
+   * @generated from field: string source = 2;
+   */
+  source: string;
+
+  /**
+   * units are what runs: stage zero's units first, then each shard's, in plan order.
+   *
+   * @generated from field: repeated magus.graph.v1alpha1.PlanUnit units = 3;
+   */
+  units: PlanUnit[];
+
+  /**
+   * unreached are units of affected projects whose closures read no changed path, sorted.
+   * Each replays from the cache, so no shard runs it.
+   *
+   * @generated from field: repeated magus.graph.v1alpha1.PlanUnit unreached = 4;
+   */
+  unreached: PlanUnit[];
+
+  /**
+   * unbounded_by, when set, says why the set is not a proof: the diff edits a declaration, a
+   * dependency manifest or a toolchain pin, or touches a path no project claims.
+   *
+   * @generated from field: string unbounded_by = 5;
+   */
+  unboundedBy: string;
+
+  /**
+   * the command that runs the plan, e.g. "magus affected ci"
+   *
+   * @generated from field: string command = 6;
+   */
+  command: string;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.AffectedPlan.
+ * Use `create(AffectedPlanSchema)` to create a new message.
+ */
+export const AffectedPlanSchema: GenMessage<AffectedPlan> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 21);
+
+/**
+ * PlanUnit is one target of one project.
+ *
+ * @generated from message magus.graph.v1alpha1.PlanUnit
+ */
+export type PlanUnit = Message<"magus.graph.v1alpha1.PlanUnit"> & {
+  /**
+   * the project node id
+   *
+   * @generated from field: string project = 1;
+   */
+  project: string;
+
+  /**
+   * the target name
+   *
+   * @generated from field: string target = 2;
+   */
+  target: string;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.PlanUnit.
+ * Use `create(PlanUnitSchema)` to create a new message.
+ */
+export const PlanUnitSchema: GenMessage<PlanUnit> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 22);
 
 /**
  * @generated from message magus.graph.v1alpha1.Path
@@ -762,7 +991,7 @@ export type Path = Message<"magus.graph.v1alpha1.Path"> & {
  * Use `create(PathSchema)` to create a new message.
  */
 export const PathSchema: GenMessage<Path> = /*@__PURE__*/
-  messageDesc(file_magus_graph_v1alpha1_graph, 18);
+  messageDesc(file_magus_graph_v1alpha1_graph, 23);
 
 /**
  * PathStep is one hop as WALKED (from -> to). forward=false means the path traversed the
@@ -797,7 +1026,7 @@ export type PathStep = Message<"magus.graph.v1alpha1.PathStep"> & {
  * Use `create(PathStepSchema)` to create a new message.
  */
 export const PathStepSchema: GenMessage<PathStep> = /*@__PURE__*/
-  messageDesc(file_magus_graph_v1alpha1_graph, 19);
+  messageDesc(file_magus_graph_v1alpha1_graph, 24);
 
 /**
  * @generated from message magus.graph.v1alpha1.GetGraphStatsRequest
@@ -816,7 +1045,7 @@ export type GetGraphStatsRequest = Message<"magus.graph.v1alpha1.GetGraphStatsRe
  * Use `create(GetGraphStatsRequestSchema)` to create a new message.
  */
 export const GetGraphStatsRequestSchema: GenMessage<GetGraphStatsRequest> = /*@__PURE__*/
-  messageDesc(file_magus_graph_v1alpha1_graph, 20);
+  messageDesc(file_magus_graph_v1alpha1_graph, 25);
 
 /**
  * @generated from message magus.graph.v1alpha1.GraphStats
@@ -868,7 +1097,7 @@ export type GraphStats = Message<"magus.graph.v1alpha1.GraphStats"> & {
  * Use `create(GraphStatsSchema)` to create a new message.
  */
 export const GraphStatsSchema: GenMessage<GraphStats> = /*@__PURE__*/
-  messageDesc(file_magus_graph_v1alpha1_graph, 21);
+  messageDesc(file_magus_graph_v1alpha1_graph, 26);
 
 /**
  * @generated from message magus.graph.v1alpha1.GodNode
@@ -912,7 +1141,7 @@ export type GodNode = Message<"magus.graph.v1alpha1.GodNode"> & {
  * Use `create(GodNodeSchema)` to create a new message.
  */
 export const GodNodeSchema: GenMessage<GodNode> = /*@__PURE__*/
-  messageDesc(file_magus_graph_v1alpha1_graph, 22);
+  messageDesc(file_magus_graph_v1alpha1_graph, 27);
 
 /**
  * Orphan is a node missing the connection its KIND implies - a doc that documents nothing, a
@@ -948,7 +1177,7 @@ export type Orphan = Message<"magus.graph.v1alpha1.Orphan"> & {
  * Use `create(OrphanSchema)` to create a new message.
  */
 export const OrphanSchema: GenMessage<Orphan> = /*@__PURE__*/
-  messageDesc(file_magus_graph_v1alpha1_graph, 23);
+  messageDesc(file_magus_graph_v1alpha1_graph, 28);
 
 /**
  * DocCoverage is doc coverage for one documentable kind. undocumented is a capped sample, not
@@ -988,7 +1217,7 @@ export type DocCoverage = Message<"magus.graph.v1alpha1.DocCoverage"> & {
  * Use `create(DocCoverageSchema)` to create a new message.
  */
 export const DocCoverageSchema: GenMessage<DocCoverage> = /*@__PURE__*/
-  messageDesc(file_magus_graph_v1alpha1_graph, 24);
+  messageDesc(file_magus_graph_v1alpha1_graph, 29);
 
 /**
  * Answer classifies a result against what magus could actually search. A stated reason or any
@@ -1020,7 +1249,7 @@ export type Answer = Message<"magus.graph.v1alpha1.Answer"> & {
  * Use `create(AnswerSchema)` to create a new message.
  */
 export const AnswerSchema: GenMessage<Answer> = /*@__PURE__*/
-  messageDesc(file_magus_graph_v1alpha1_graph, 25);
+  messageDesc(file_magus_graph_v1alpha1_graph, 30);
 
 /**
  * SymbolGap is one project whose declared symbol index magus could not read: the evidence behind
@@ -1060,7 +1289,7 @@ export type SymbolGap = Message<"magus.graph.v1alpha1.SymbolGap"> & {
  * Use `create(SymbolGapSchema)` to create a new message.
  */
 export const SymbolGapSchema: GenMessage<SymbolGap> = /*@__PURE__*/
-  messageDesc(file_magus_graph_v1alpha1_graph, 26);
+  messageDesc(file_magus_graph_v1alpha1_graph, 31);
 
 /**
  * @generated from enum magus.graph.v1alpha1.EdgeDirection
@@ -1176,7 +1405,8 @@ export const GraphService: GenService<{
   },
   /**
    * FindAffected returns the projects a VCS diff reaches, as graph node ids, so a viewer can
-   * highlight what the working tree touches. `magus affected` over the wire.
+   * highlight what the working tree touches, with why each is reached and what to run.
+   * `magus affected` with --impact, --explain and --plan over the wire.
    *
    * Read-only like the rest of the service, but the only verb here that reads the VCS rather
    * than the graph, so it is the only one whose answer changes while the graph stands still.

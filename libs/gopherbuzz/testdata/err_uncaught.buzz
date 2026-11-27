@@ -1,2 +1,6 @@
 // @error: uncaught error
-throw "boom";
+var __r: any = null;
+
+fun main(args: [str]) > void !> any {
+    throw "boom";
+}

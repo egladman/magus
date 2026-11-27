@@ -34,10 +34,12 @@ Render a Mustache template against a context value (usually a name->value map; l
 import "std";
 import "template";
 
-// Backtick raw strings hold the Mustache verbatim; a double-quoted "{{name}}"
-// would collide with Buzz's own {expr} string interpolation.
-std\print(template\render(`Hello {{name}}`, {"name": "world"}) catch "");
-// -> "Hello world"
+fun main(args: [str]) > void {
+    // Backtick raw strings hold the Mustache verbatim; a double-quoted "{{name}}"
+    // would collide with Buzz's own {expr} string interpolation.
+    std\print(template\render(`Hello {{name}}`, data: {"name": "world"}) catch "");
+    // -> "Hello world"
+}
 ```
 
 ### renderPartials
@@ -61,16 +63,18 @@ Render a Mustache template that includes partials via {{>name}}, resolving each 
 import "std";
 import "template";
 
-// Shared chrome lives in partials; the page template pulls them in with {{>name}}.
-// Backtick raw strings hold the Mustache verbatim (a double-quoted string would
-// collide with Buzz's own {expr} interpolation).
-final page = `{{>header}}<main>{{body}}</main>{{>footer}}`;
-final partials = {
-    "header": `<header>{{title}}</header>`,
-    "footer": `<footer>{{title}}</footer>`,
-};
+fun main(args: [str]) > void {
+    // Shared chrome lives in partials, pulled in with {{>name}}.
+    // Backtick raw strings hold the Mustache verbatim (a double-quoted string would
+    // collide with Buzz's own {expr} interpolation).
+    final page = `{{>header}}<main>{{body}}</main>{{>footer}}`;
+    final partials = {
+        "header": `<header>{{title}}</header>`,
+        "footer": `<footer>{{title}}</footer>`,
+    };
 
-std\print(template\renderPartials(page, {"title": "magus", "body": "hi"}, partials) catch "");
-// -> "<header>magus</header><main>hi</main><footer>magus</footer>"
+    std\print(template\renderPartials(page, data: {"title": "magus", "body": "hi"}, partials: partials) catch "");
+    // -> "<header>magus</header><main>hi</main><footer>magus</footer>"
+}
 ```
 

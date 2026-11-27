@@ -37,7 +37,9 @@ Return paths matching pattern (doublestar-style).
 import "std";
 import "fs";
 
-foreach (path in fs\glob("cmd/**/*.go") catch []) { std\print(path.value); }
+fun main(args: [str]) > void {
+    foreach (path in fs\glob("cmd/**/*.go") catch []) { std\print(path.value); }
+}
 ```
 
 ### dirname
@@ -102,9 +104,11 @@ True iff path exists.
 import "std";
 import "fs";
 
-// exists raises when the path cannot be examined at all (an unreadable parent),
-// which is not the same answer as "no", so the fallback says no separately.
-if (fs\exists("go.mod") catch false) { std\print("Go module"); }
+fun main(args: [str]) > void {
+    // exists raises when the path cannot be examined at all, such as an unreadable parent.
+    // That is not the same answer as "no", so the fallback says no separately.
+    if (fs\exists("go.mod") catch false) { std\print("Go module"); }
+}
 ```
 
 ### readFile
@@ -146,10 +150,12 @@ Write content to path (mode 0644).
 import "std";
 import "fs";
 
-try {
-    fs\writeFile("dist/manifest.txt", "artifact list here\n");
-} catch (e) {
-    std\print("could not write dist/manifest.txt");
+fun main(args: [str]) > void {
+    try {
+        fs\writeFile("dist/manifest.txt", content: "artifact list here\n");
+    } catch (e) {
+        std\print("could not write dist/manifest.txt");
+    }
 }
 ```
 
@@ -202,10 +208,12 @@ Recursively remove path (no error if missing).
 import "std";
 import "fs";
 
-try {
-    fs\removeAll("dist/");
-} catch (e) {
-    std\print("could not remove dist/");
+fun main(args: [str]) > void {
+    try {
+        fs\removeAll("dist/");
+    } catch (e) {
+        std\print("could not remove dist/");
+    }
 }
 ```
 
@@ -283,7 +291,9 @@ Return directory entries; empty if path does not exist.
 import "std";
 import "fs";
 
-foreach (name in fs\listDir("cmd") catch []) { std\print(name); }
+fun main(args: [str]) > void {
+    foreach (name in fs\listDir("cmd") catch []) { std\print(name); }
+}
 ```
 
 ### ext
@@ -326,7 +336,9 @@ True iff path exists and is a directory. A sandbox-denied path raises rather tha
 import "std";
 import "fs";
 
-if (fs\isDir("internal") catch false) { std\print("internal is a directory"); }
+fun main(args: [str]) > void {
+    if (fs\isDir("internal") catch false) { std\print("internal is a directory"); }
+}
 ```
 
 ### isFile
@@ -347,7 +359,9 @@ True iff path exists and is a regular file. A sandbox-denied path raises rather 
 import "std";
 import "fs";
 
-if (fs\isFile("go.mod") catch false) { std\print("go.mod is a file"); }
+fun main(args: [str]) > void {
+    if (fs\isFile("go.mod") catch false) { std\print("go.mod is a file"); }
+}
 ```
 
 ### stat
@@ -368,16 +382,16 @@ Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as
 import "std";
 import "fs";
 
-// Bracket access, not info.size: `size` is a built-in map METHOD, so dot access returns
-// the method rather than the stat field. The time key is `mtime` (Unix millis), not
-// `modTime` - dot access on a missing key is silent, which is how this example went
-// unnoticed while printing nothing useful.
-try {
-    final info = fs\stat("go.mod");
-    std\print(info["size"]);
-    std\print(info["mtime"]);
-} catch (e) {
-    std\print("go.mod is not there to stat");
+fun main(args: [str]) > void {
+    // Dot access on a built-in map method name returns the method, not the field,
+    // so read stat fields with brackets: info["size"], info["mtime"].
+    try {
+        final info = fs\stat("go.mod");
+        std\print(info["size"]);
+        std\print(info["mtime"]);
+    } catch (e) {
+        std\print("go.mod is not there to stat");
+    }
 }
 ```
 
@@ -398,10 +412,12 @@ Copy the file at src to dst (overwriting), preserving its permission bits.
 import "std";
 import "fs";
 
-try {
-    fs\copyFile("dist/magus", "/usr/local/bin/magus");
-} catch (e) {
-    std\print("could not install dist/magus");
+fun main(args: [str]) > void {
+    try {
+        fs\copyFile("dist/magus", dst: "/usr/local/bin/magus");
+    } catch (e) {
+        std\print("could not install dist/magus");
+    }
 }
 ```
 
@@ -422,11 +438,13 @@ Recursively copy the directory tree at src to dst, preserving permission bits.
 import "std";
 import "fs";
 
-// Recursive copy; preserves file mode and dir structure.
-try {
-    fs\copyDir("assets/", "dist/assets/");
-} catch (e) {
-    std\print("could not copy assets/ into dist/assets/");
+fun main(args: [str]) > void {
+    // Recursive copy; preserves file mode and dir structure.
+    try {
+        fs\copyDir("assets/", dst: "dist/assets/");
+    } catch (e) {
+        std\print("could not copy assets/ into dist/assets/");
+    }
 }
 ```
 
@@ -447,14 +465,16 @@ Blocking. Watch paths (directories, recursively) and call callback with each deb
 import "std";
 import "fs";
 
-// Blocks; the callback fires per change batch. Return true to keep watching.
-try {
-    fs\watch(["cmd/**/*.go", "internal/**/*.go"], fun (paths: [str]) > bool {
-        foreach (p in paths) { std\print("changed: " + p); }
-        return true;
-    });
-} catch (e) {
-    std\print("watch stopped");
+fun main(args: [str]) > void {
+    // Blocks; the callback fires per change batch. Return true to keep watching.
+    try {
+        fs\watch(["cmd/**/*.go", "internal/**/*.go"], callback: fun (paths: [str]) > bool {
+            foreach (p in paths) { std\print("changed: " + p); }
+            return true;
+        });
+    } catch (e) {
+        std\print("watch stopped");
+    }
 }
 ```
 
@@ -503,10 +523,12 @@ Append content to path (creating if absent, mode 0644).
 import "std";
 import "fs";
 
-try {
-    fs\appendFile("dist/build.log", "compile done\n");
-} catch (e) {
-    std\print("could not append to dist/build.log");
+fun main(args: [str]) > void {
+    try {
+        fs\appendFile("dist/build.log", content: "compile done\n");
+    } catch (e) {
+        std\print("could not append to dist/build.log");
+    }
 }
 ```
 
@@ -539,12 +561,14 @@ Change the permission bits of path to mode (an integer; fs\mode("0755") spells o
 import "std";
 import "fs";
 
-// Mark the release binary executable. Buzz has no octal literal
-// (matches upstream); Unix mode 0755 = 493 decimal.
-try {
-    fs\chmod("dist/magus", 493);
-} catch (e) {
-    std\print("could not chmod dist/magus");
+fun main(args: [str]) > void {
+    // Mark the release binary executable. Buzz has no octal literal
+    // (matches upstream); Unix mode 0755 = 493 decimal.
+    try {
+        fs\chmod("dist/magus", mode: 493);
+    } catch (e) {
+        std\print("could not chmod dist/magus");
+    }
 }
 ```
 
@@ -565,10 +589,12 @@ Create a symbolic link at link pointing to target.
 import "std";
 import "fs";
 
-try {
-    fs\symlink("dist/magus", "/usr/local/bin/magus");
-} catch (e) {
-    std\print("could not link /usr/local/bin/magus");
+fun main(args: [str]) > void {
+    try {
+        fs\symlink("dist/magus", link: "/usr/local/bin/magus");
+    } catch (e) {
+        std\print("could not link /usr/local/bin/magus");
+    }
 }
 ```
 
@@ -612,13 +638,15 @@ Create a new temporary directory with an optional name prefix and return its pat
 import "std";
 import "fs";
 
-// No sensible fallback path exists, so an unwritable temp dir is reported rather
-// than substituted.
-try {
-    std\print(fs\tempDir("magus-build-"));
-    // -> "/tmp/magus-build-abc123"
-} catch (e) {
-    std\print("no writable temp dir");
+fun main(args: [str]) > void {
+    // No sensible fallback path exists, so an unwritable temp dir is reported rather
+    // than substituted.
+    try {
+        std\print(fs\tempDir("magus-build-"));
+        // -> "/tmp/magus-build-abc123"
+    } catch (e) {
+        std\print("no writable temp dir");
+    }
 }
 ```
 
@@ -652,7 +680,9 @@ Read path and return its lines as a list, with the line terminators stripped. A 
 import "std";
 import "fs";
 
-foreach (line in fs\readLines("targets.txt") catch []) { std\print(line); }
+fun main(args: [str]) > void {
+    foreach (line in fs\readLines("targets.txt") catch []) { std\print(line); }
+}
 ```
 
 ### writeLines
@@ -672,10 +702,12 @@ Write lines to path (mode 0644), each followed by a newline. The companion to re
 import "std";
 import "fs";
 
-try {
-    fs\writeLines("dist/targets.txt", ["build", "test", "lint"]);
-} catch (e) {
-    std\print("could not write dist/targets.txt");
+fun main(args: [str]) > void {
+    try {
+        fs\writeLines("dist/targets.txt", lines: ["build", "test", "lint"]);
+    } catch (e) {
+        std\print("could not write dist/targets.txt");
+    }
 }
 ```
 

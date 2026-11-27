@@ -1,6 +1,8 @@
 package parsecache_test
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -45,4 +47,50 @@ func (s *DoorSuite) TestSessionCarriesBothOptions() {
 	opts, err := parsecache.Session()
 	s.Require().NoError(err)
 	s.Len(opts, 2)
+}
+
+// padded lifts src past the cache's minimum cached length so the cache is exercised.
+func padded(src string) string {
+	return src + "\n// " + strings.Repeat("x", 300) + "\n"
+}
+
+const rawSrc = `final x = r"a\b";`
+
+func (s *DoorSuite) TestParseCarriesTheScanner() {
+	_, err := parsecache.Parse(rawSrc)
+	s.NoError(err)
+	_, err = buzz.Parse(rawSrc)
+	s.Error(err)
+}
+
+func (s *DoorSuite) TestTokenizeAndParserShareOneScanner() {
+	p, err := parsecache.Parser()
+	s.Require().NoError(err)
+	toks, err := p.Scanner.Tokenize(`r"a"`)
+	s.Require().NoError(err)
+	s.Equal(token.String, toks[0].Kind)
+}
+
+func (s *DoorSuite) TestSessionExecsRawString() {
+	opts, err := parsecache.Session()
+	s.Require().NoError(err)
+	sess := buzz.NewSession(context.Background(), append([]buzz.Option{buzz.WithEmbedded()}, opts...)...)
+	s.T().Cleanup(func() { _ = sess.Close() })
+	s.Require().NoError(sess.Exec(context.Background(), `var v = r"a\b";`))
+	s.Equal(`a\b`, sess.GetGlobal("v").AsString())
+}
+
+func (s *DoorSuite) TestCacheNeverCrossesScanners() {
+	plain := buzz.Parser{Cache: parsecache.Shared()}
+	for _, src := range []string{padded(rawSrc), padded(`final y = r"c\d";`)} {
+		_, err := parsecache.Parse(src)
+		s.NoError(err)
+		_, err = plain.Parse(src)
+		s.Error(err, "a cached extended lex is never served to a plain parse")
+	}
+	plainFirst := padded(`final z = r"e\f";`)
+	_, err := plain.Parse(plainFirst)
+	s.Error(err)
+	_, err = parsecache.Parse(plainFirst)
+	s.NoError(err)
 }

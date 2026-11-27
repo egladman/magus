@@ -1,4 +1,6 @@
 import "std";
 import "fs";
 
-foreach (path in fs\glob("cmd/**/*.go") catch []) { std\print(path.value); }
+fun main(args: [str]) > void {
+    foreach (path in fs\glob("cmd/**/*.go") catch []) { std\print(path.value); }
+}

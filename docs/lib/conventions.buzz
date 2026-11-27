@@ -90,11 +90,11 @@ fun conventionHint(conventions: [Convention], anchor: str, relToConventions: str
 // left untouched.
 export fun injectConventionHints(html: str, conventions: [Convention], relToConventions: str) > str {
     var h = html;
-    h = insertBeforeClose(h, "<p class=\"admonition-title\">", "</p>",
-        conventionHint(conventions, "admonitions", relToConventions));
-    h = insertBeforeClose(h, "<figcaption>", "</figcaption>",
-        conventionHint(conventions, "code-block-titles", relToConventions));
-    h = injectFirstPlaceholderHint(h, conventionHint(conventions, "placeholders", relToConventions));
+    h = insertBeforeClose(h, open: "<p class=\"admonition-title\">", close: "</p>",
+        ins: conventionHint(conventions, anchor: "admonitions", relToConventions: relToConventions));
+    h = insertBeforeClose(h, open: "<figcaption>", close: "</figcaption>",
+        ins: conventionHint(conventions, anchor: "code-block-titles", relToConventions: relToConventions));
+    h = injectFirstPlaceholderHint(h, hint: conventionHint(conventions, anchor: "placeholders", relToConventions: relToConventions));
     return h;
 }
 
@@ -202,8 +202,8 @@ fun leadingRun(s: str, ch: int) > str {
 // every rule after it.
 fun fenceMarker(line: str) > str {
     final t = line.trim();
-    if (t.startsWith("```")) { return leadingRun(t, 96); }    // 96 = backtick
-    if (t.startsWith("~~~")) { return leadingRun(t, 126); }   // 126 = tilde
+    if (t.startsWith("```")) { return leadingRun(t, ch: 96); }    // 96 = backtick
+    if (t.startsWith("~~~")) { return leadingRun(t, ch: 126); }   // 126 = tilde
     return "";
 }
 
@@ -219,7 +219,7 @@ fun fenceLang(line: str, marker: str) > str {
 // character, at least as long, and nothing else on the line.
 fun closesFence(line: str, openMarker: str) > bool {
     final t = line.trim();
-    final run = leadingRun(t, openMarker.byte(0));
+    final run = leadingRun(t, ch: openMarker.byte(0));
     return run.len() >= openMarker.len() and run.len() == t.len();
 }
 
@@ -574,7 +574,7 @@ export fun pathCheckApplies(file: str) > bool {
 fun fileDir(file: str) > str {
     final segs = splitPath(file);
     if (segs.len() <= 1) { return ""; }
-    return segs.sub(0, segs.len() - 1).join("/");
+    return segs.sub(0, len: segs.len() - 1).join("/");
 }
 
 // linkTargets returns every `](target)` markdown-link target on a line, in order. A link
@@ -648,7 +648,7 @@ export fun pathReferences(file: str, md: str) > [ConventionFinding] {
             if (body == null) { continue; }
             found.append(ConventionFinding{ file = file, line = n, rule = "missing-link",
                 message = "link target `" + target + "` does not resolve to a file in the repository",
-                path = resolvePath(dir, body!) });
+                path = resolvePath(dir, link: body!) });
         }
     }
     return found;
@@ -657,18 +657,18 @@ export fun pathReferences(file: str, md: str) > [ConventionFinding] {
 test "parseConventions reads H2 sections, anchors, and a cleaned lead line" {
     final md = "# Documentation conventions\n\n## Admonitions\n\nCall-outs carry a colored accent per type:\n\n> [!NOTE]\n> body\n\n## Diffs\n\nA `diff` block shows a change.\n";
     final cs = parseConventions(md);
-    assert\equal(cs.len(), 2, "two sections parsed");
-    assert\equal(cs[0].title, "Admonitions", "title");
-    assert\equal(cs[0].anchor, "admonitions", "goldmark anchor");
-    assert\equal(cs[0].def, "Call-outs carry a colored accent per type", "lead line, trailing colon dropped");
-    assert\equal(cs[1].def, "A diff block shows a change.", "backticks stripped");
+    assert\equal(cs.len(), want: 2, message: "two sections parsed");
+    assert\equal(cs[0].title, want: "Admonitions", message: "title");
+    assert\equal(cs[0].anchor, want: "admonitions", message: "goldmark anchor");
+    assert\equal(cs[0].def, want: "Call-outs carry a colored accent per type", message: "lead line, trailing colon dropped");
+    assert\equal(cs[1].def, want: "A diff block shows a change.", message: "backticks stripped");
 }
 
 test "a lead paragraph wrapped across source lines joins into one" {
     // Every section on the real conventions page wraps its lead, so this is the common
     // path, not an edge case.
     final cs = parseConventions("## Footnotes\n\nA footnote marker\nwraps across source lines.\n");
-    assert\equal(cs[0].def, "A footnote marker wraps across source lines.", "joined on a single space");
+    assert\equal(cs[0].def, want: "A footnote marker wraps across source lines.", message: "joined on a single space");
 }
 
 test "injectConventionHints links an admonition title and a code caption" {
@@ -677,62 +677,62 @@ test "injectConventionHints links an admonition title and a code caption" {
     cs.append(Convention{ title = "Code-block titles", anchor = "code-block-titles", def = "a filename caption" });
     final res = injectConventionHints(
         "<div class=\"admonition admonition-note\"><p class=\"admonition-title\">Note</p>\n<p>body</p>\n</div>",
-        cs, "../conventions/");
-    assert\equal(res.indexOf("<p class=\"admonition-title\">Note<a class=\"convention-hint\"") != null, true,
-        "hint injected before the title close");
-    assert\equal(res.indexOf("href=\"../conventions/#admonitions\"") != null, true, "hint targets the section anchor");
+        conventions: cs, relToConventions: "../conventions/");
+    assert\equal(res.indexOf("<p class=\"admonition-title\">Note<a class=\"convention-hint\"") != null, want: true,
+        message: "hint injected before the title close");
+    assert\equal(res.indexOf("href=\"../conventions/#admonitions\"") != null, want: true, message: "hint targets the section anchor");
 }
 
 test "injectConventionHints leaves markers untouched when the section is absent" {
     final cs = mut [<Convention>];
     final html = "<p class=\"admonition-title\">Note</p>";
-    assert\equal(injectConventionHints(html, cs, "../conventions/"), html, "no conventions, no change");
+    assert\equal(injectConventionHints(html, conventions: cs, relToConventions: "../conventions/"), want: html, message: "no conventions, no change");
 }
 
 test "the placeholder hint lands on the first inline placeholder only, never a fenced block" {
     final cs = mut [<Convention>];
     cs.append(Convention{ title = "Placeholders", anchor = "placeholders", def = "angle-bracket stand-ins" });
     final html = "<pre><code>magus run &lt;x&gt;\nmore</code></pre> then <code>&lt;target&gt;</code> and <code>&lt;path&gt;</code>";
-    final res = injectConventionHints(html, cs, "../conventions/");
-    assert\equal(res.indexOf("<code>&lt;target&gt;</code><a class=\"convention-hint\"") != null, true,
-        "first inline placeholder hinted");
-    assert\equal(res.indexOf("<code>&lt;path&gt;</code><a") != null, false, "second placeholder not hinted");
-    assert\equal(res.indexOf("more</code></pre><a") != null, false, "fenced block not hinted");
+    final res = injectConventionHints(html, conventions: cs, relToConventions: "../conventions/");
+    assert\equal(res.indexOf("<code>&lt;target&gt;</code><a class=\"convention-hint\"") != null, want: true,
+        message: "first inline placeholder hinted");
+    assert\equal(res.indexOf("<code>&lt;path&gt;</code><a") != null, want: false, message: "second placeholder not hinted");
+    assert\equal(res.indexOf("more</code></pre><a") != null, want: false, message: "fenced block not hinted");
 }
 
 test "namesPinnedVersion tells a pinned version from an ordinary number" {
-    assert\equal(namesPinnedVersion("# magus 0.4.2"), true, "bare semver");
-    assert\equal(namesPinnedVersion("# magus v0.4.2 (3da15dc9) built ..."), true, "v-prefixed");
-    assert\equal(namesPinnedVersion("# magus <version> (<commit>) built <date>"), false,
-        "the shape is what we want, so it must not fire");
-    assert\equal(namesPinnedVersion("# magus 3 steps planned"), false, "a count is not a version");
-    assert\equal(namesPinnedVersion("# nothing here"), false, "no mention at all");
+    assert\equal(namesPinnedVersion("# magus 0.4.2"), want: true, message: "bare semver");
+    assert\equal(namesPinnedVersion("# magus v0.4.2 (3da15dc9) built ..."), want: true, message: "v-prefixed");
+    assert\equal(namesPinnedVersion("# magus <version> (<commit>) built <date>"), want: false,
+        message: "the shape is what we want, so it must not fire");
+    assert\equal(namesPinnedVersion("# magus 3 steps planned"), want: false, message: "a count is not a version");
+    assert\equal(namesPinnedVersion("# nothing here"), want: false, message: "no mention at all");
 }
 
 test "lintMarkdown flags a shell prompt only inside a command block" {
     final md = "text\n\n```sh\n$ magus run build\nmagus run test\n```\n\n```buzz\n$ not a shell block\n```\n";
-    final f = lintMarkdown("p.md", md);
-    assert\equal(f.len(), 1, "one finding");
-    assert\equal(f[0].rule, "shell-prompt", "rule name");
-    assert\equal(f[0].line, 4, "the prompt line, not the fence");
+    final f = lintMarkdown("p.md", md: md);
+    assert\equal(f.len(), want: 1, message: "one finding");
+    assert\equal(f[0].rule, want: "shell-prompt", message: "rule name");
+    assert\equal(f[0].line, want: 4, message: "the prompt line, not the fence");
 }
 
 test "a console block keeps its prompt: it is a transcript, not something to copy" {
-    assert\equal(lintMarkdown("p.md", "```console\n$ magus version\nmagus v1.2.3\n```\n").len(), 0,
-        "the prompt is what separates the input from the captured output");
+    assert\equal(lintMarkdown("p.md", md: "```console\n$ magus version\nmagus v1.2.3\n```\n").len(), want: 0,
+        message: "the prompt is what separates the input from the captured output");
 }
 
 test "lintMarkdown flags a pinned version in example output" {
-    final f = lintMarkdown("p.md", "```sh\nmagus version\n# magus 0.4.2\n```\n");
-    assert\equal(f.len(), 1, "one finding");
-    assert\equal(f[0].rule, "pinned-version", "rule name");
+    final f = lintMarkdown("p.md", md: "```sh\nmagus version\n# magus 0.4.2\n```\n");
+    assert\equal(f.len(), want: 1, message: "one finding");
+    assert\equal(f[0].rule, want: "pinned-version", message: "rule name");
 }
 
 test "lintMarkdown holds a decisions page to the ADR template" {
-    final f = lintMarkdown("docs/decisions/0009-x.md", "# ADR 0009: x\n");
-    assert\equal(f.len(), 2, "no front matter, reported by the ADR rule and the page rule");
-    assert\equal(f[0].rule, "adr-template", "rule name");
-    assert\equal(f[1].rule, "front-matter", "the page rule's name");
+    final f = lintMarkdown("docs/decisions/0009-x.md", md: "# ADR 0009: x\n");
+    assert\equal(f.len(), want: 2, message: "no front matter, reported by the ADR rule and the page rule");
+    assert\equal(f[0].rule, want: "adr-template", message: "rule name");
+    assert\equal(f[1].rule, want: "front-matter", message: "the page rule's name");
 }
 
 // rulesOf is the rule of each finding, in order.
@@ -745,73 +745,73 @@ fun rulesOf(found: [ConventionFinding]) > str {
 final CLEAN_PAGE = "---\ntitle: Remote caching\norder: 3\ndescription: Share a cache.\ntags: [cache]\naliases: [/old/]\n---\n\n# Remote caching\n\nSee [targets](targets.md).\n";
 
 test "an authored page in the documented shape passes the page rules" {
-    assert\equal(rulesOf(lintMarkdown("docs/concepts/cache.md", CLEAN_PAGE)), "", "clean");
+    assert\equal(rulesOf(lintMarkdown("docs/concepts/cache.md", md: CLEAN_PAGE)), want: "", message: "clean");
 }
 
 test "front matter out of order, with an unknown key or a missing one, is reported at its line" {
     final md = "---\ntitle: A\naliases: [/a/]\ndescription: An a.\nlayout: wide\n---\n\n# A\n";
-    final f = lintMarkdown("docs/a.md", md);
-    assert\equal(rulesOf(f), "front-matter,front-matter,front-matter", "three findings");
-    assert\equal(f[0].line, 4, "description after aliases");
-    assert\equal(f[0].message.indexOf("`description` follows `aliases`") != null, true, "names both keys");
-    assert\equal(f[1].line, 5, "the unknown key");
-    assert\equal(f[2].message.indexOf("no `tags`") != null, true, "the missing key");
+    final f = lintMarkdown("docs/a.md", md: md);
+    assert\equal(rulesOf(f), want: "front-matter,front-matter,front-matter", message: "three findings");
+    assert\equal(f[0].line, want: 4, message: "description after aliases");
+    assert\equal(f[0].message.indexOf("`description` follows `aliases`") != null, want: true, message: "names both keys");
+    assert\equal(f[1].line, want: 5, message: "the unknown key");
+    assert\equal(f[2].message.indexOf("no `tags`") != null, want: true, message: "the missing key");
 }
 
 test "order and page_type share the slot after title, in that order" {
     final both = "---\ntitle: S\norder: 4\npage_type: overview\ndescription: S.\ntags: [s]\n---\n\n# S\n";
-    assert\equal(rulesOf(lintMarkdown("docs/s.md", both)), "", "both, in order");
+    assert\equal(rulesOf(lintMarkdown("docs/s.md", md: both)), want: "", message: "both, in order");
     final swapped = "---\ntitle: S\npage_type: overview\norder: 4\ndescription: S.\ntags: [s]\n---\n\n# S\n";
-    assert\equal(rulesOf(lintMarkdown("docs/s.md", swapped)), "front-matter", "order after page_type");
+    assert\equal(rulesOf(lintMarkdown("docs/s.md", md: swapped)), want: "front-matter", message: "order after page_type");
 }
 
 test "status, date and supersedes follow tags on an ADR and are refused on any other page" {
     final fm = "---\ntitle: \"ADR 0009: x\"\norder: 9\ndescription: X.\ntags: [adr]\nstatus: proposed\ndate: 2026-10-07\n---\n\n";
     final adr = fm + "# ADR 0009: x\n";
-    assert\equal(rulesOf(lintMarkdown("docs/decisions/0009-x.md", adr)).indexOf("front-matter"), null, "an ADR may carry them");
+    assert\equal(rulesOf(lintMarkdown("docs/decisions/0009-x.md", md: adr)).indexOf("front-matter"), want: null, message: "an ADR may carry them");
     final other = "---\ntitle: X\ndescription: X.\ntags: [x]\nstatus: proposed\n---\n\n# X\n";
-    assert\equal(rulesOf(lintMarkdown("docs/x.md", other)), "front-matter", "another page may not");
+    assert\equal(rulesOf(lintMarkdown("docs/x.md", md: other)), want: "front-matter", message: "another page may not");
     final early = "---\ntitle: \"ADR 0009: x\"\norder: 9\nstatus: proposed\ndescription: X.\ntags: [adr]\ndate: 2026-10-07\n---\n\n# ADR 0009: x\n";
     var named = false;
-    foreach (f in lintMarkdown("docs/decisions/0009-x.md", early)) {
+    foreach (f in lintMarkdown("docs/decisions/0009-x.md", md: early)) {
         if (f.message.indexOf("`description` follows `status`") != null) { named = true; }
     }
-    assert\equal(named, true, "status before description");
+    assert\equal(named, want: true, message: "status before description");
 }
 
 test "a description must end with a period, however it is quoted or wrapped" {
     final page = fun (d: str) > str => "---\ntitle: D\n" + d + "\ntags: [d]\n---\n\n# D\n";
-    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("description: no period"))), "front-matter", "plain");
-    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("description: \"quoted.\""))), "", "quoted");
-    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("description: wrapped\n  over two lines."))), "", "wrapped");
-    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("description: >-\n  folded"))), "front-matter", "folded, no period");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", md: page("description: no period"))), want: "front-matter", message: "plain");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", md: page("description: \"quoted.\""))), want: "", message: "quoted");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", md: page("description: wrapped\n  over two lines."))), want: "", message: "wrapped");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", md: page("description: >-\n  folded"))), want: "front-matter", message: "folded, no period");
 }
 
 test "the H1 must be the front-matter title, compared after YAML unquoting" {
     final page = fun (t: str, h: str) > str => "---\ntitle: " + t + "\ndescription: D.\ntags: [d]\n---\n\n" + h + "\n";
-    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("Debugging magusfiles", "# Debugging"))), "h1-title", "mismatch");
-    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("\"MGS1045: a magus\\\\guard.spawn\"", "# MGS1045: a magus\\guard.spawn"))),
-        "", "escaped backslash");
-    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("D", "```md\n# D\n```\n\n# D"))), "", "a fenced H1 is not the H1");
-    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("D", "## D"))), "h1-title", "no H1");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", md: page("Debugging magusfiles", h: "# Debugging"))), want: "h1-title", message: "mismatch");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", md: page("\"MGS1045: a magus\\\\guard.spawn\"", h: "# MGS1045: a magus\\guard.spawn"))),
+        want: "", message: "escaped backslash");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", md: page("D", h: "```md\n# D\n```\n\n# D"))), want: "", message: "a fenced H1 is not the H1");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", md: page("D", h: "## D"))), want: "h1-title", message: "no H1");
 }
 
 test "a docs page linked by its site URL is reported, the hosted console and code are not" {
     final page = fun (body: str) > str => "---\ntitle: L\ndescription: L.\ntags: [l]\n---\n\n# L\n\n" + body + "\n";
-    final f = lintMarkdown("docs/l.md", page("See [targets](https://eli.gladman.cc/magus/concepts/targets/)."));
-    assert\equal(rulesOf(f), "site-link", "absolute page link");
-    assert\equal(f[0].line, 9, "its line");
-    assert\equal(rulesOf(lintMarkdown("docs/l.md", page("The [console](https://eli.gladman.cc/magus/console/)."))), "", "console");
-    assert\equal(rulesOf(lintMarkdown("docs/l.md", page("`[x](https://eli.gladman.cc/magus/a/)`"))), "", "inline code");
-    assert\equal(rulesOf(lintMarkdown("docs/l.md", page("```md\n[x](https://eli.gladman.cc/magus/a/)\n```"))), "", "fenced");
+    final f = lintMarkdown("docs/l.md", md: page("See [targets](https://eli.gladman.cc/magus/concepts/targets/)."));
+    assert\equal(rulesOf(f), want: "site-link", message: "absolute page link");
+    assert\equal(f[0].line, want: 9, message: "its line");
+    assert\equal(rulesOf(lintMarkdown("docs/l.md", md: page("The [console](https://eli.gladman.cc/magus/console/)."))), want: "", message: "console");
+    assert\equal(rulesOf(lintMarkdown("docs/l.md", md: page("`[x](https://eli.gladman.cc/magus/a/)`"))), want: "", message: "inline code");
+    assert\equal(rulesOf(lintMarkdown("docs/l.md", md: page("```md\n[x](https://eli.gladman.cc/magus/a/)\n```"))), want: "", message: "fenced");
 }
 
 test "generated pages and pages outside docs/ skip the page rules" {
     final bare = "# Something else\n";
-    assert\equal(rulesOf(lintMarkdown("docs/reference/rules/raw-tool.md", bare)), "", "generated tree");
-    assert\equal(rulesOf(lintMarkdown("docs/reference/config.md", bare)), "", "generated file");
-    assert\equal(rulesOf(lintMarkdown("README.md", bare)), "", "repo root");
-    assert\equal(rulesOf(lintMarkdown("docs/concepts/x.md", bare)), "front-matter", "authored page");
+    assert\equal(rulesOf(lintMarkdown("docs/reference/rules/raw-tool.md", md: bare)), want: "", message: "generated tree");
+    assert\equal(rulesOf(lintMarkdown("docs/reference/config.md", md: bare)), want: "", message: "generated file");
+    assert\equal(rulesOf(lintMarkdown("README.md", md: bare)), want: "", message: "repo root");
+    assert\equal(rulesOf(lintMarkdown("docs/concepts/x.md", md: bare)), want: "front-matter", message: "authored page");
 }
 
 test "a four-backtick fence holds three-backtick fences without ending the block" {
@@ -819,70 +819,70 @@ test "a four-backtick fence holds three-backtick fences without ending the block
     // another. A naive toggle would close on the inner fence and read the trailing prose as
     // shell, so the rules after it would fire on the wrong lines.
     final md = "````md\n<!-- magus-run -->\n```buzz\nstd\\print(\"x\");\n```\n````\n\n$ not in a block\n";
-    assert\equal(lintMarkdown("p.md", md).len(), 0, "nothing inside or after the nested fence fires");
+    assert\equal(lintMarkdown("p.md", md: md).len(), want: 0, message: "nothing inside or after the nested fence fires");
 }
 
 test "looksLikeRepoPath accepts real path claims and rejects the lookalikes" {
-    assert\equal(looksLikeRepoPath("docs/render.buzz"), true, "file with a known extension");
-    assert\equal(looksLikeRepoPath("libs/gopherbuzz/"), true, "directory, two segments");
-    assert\equal(looksLikeRepoPath("magus/spell/go"), false, "a Buzz import path, not a file");
-    assert\equal(looksLikeRepoPath("fs\\glob"), false, "a namespaced name");
-    assert\equal(looksLikeRepoPath("**/*.md"), false, "a glob");
-    assert\equal(looksLikeRepoPath("<path>/magusfile.buzz"), false, "carries a placeholder");
-    assert\equal(looksLikeRepoPath("https://example.com/a.md"), false, "a URL");
-    assert\equal(looksLikeRepoPath("magusfile.buzz"), false, "no slash: too ambiguous to check");
-    assert\equal(looksLikeRepoPath("docs/gen/index.html"), false, "generated: absent in a fresh clone");
-    assert\equal(looksLikeRepoPath("key=value/x.md"), false, "a key=value pair");
+    assert\equal(looksLikeRepoPath("docs/render.buzz"), want: true, message: "file with a known extension");
+    assert\equal(looksLikeRepoPath("libs/gopherbuzz/"), want: true, message: "directory, two segments");
+    assert\equal(looksLikeRepoPath("magus/spell/go"), want: false, message: "a Buzz import path, not a file");
+    assert\equal(looksLikeRepoPath("fs\\glob"), want: false, message: "a namespaced name");
+    assert\equal(looksLikeRepoPath("**/*.md"), want: false, message: "a glob");
+    assert\equal(looksLikeRepoPath("<path>/magusfile.buzz"), want: false, message: "carries a placeholder");
+    assert\equal(looksLikeRepoPath("https://example.com/a.md"), want: false, message: "a URL");
+    assert\equal(looksLikeRepoPath("magusfile.buzz"), want: false, message: "no slash: too ambiguous to check");
+    assert\equal(looksLikeRepoPath("docs/gen/index.html"), want: false, message: "generated: absent in a fresh clone");
+    assert\equal(looksLikeRepoPath("key=value/x.md"), want: false, message: "a key=value pair");
 }
 
 test "looksLikeRepoPath declines the cases no lexical rule can settle" {
     // Each of these was a false positive in the first run over the real docs. They are
     // documented as limits rather than fixed, because the fix would cost more than the rule.
-    assert\equal(looksLikeRepoPath("gopherbuzz/"), false,
-        "one segment: indistinguishable from an illustrative dist/ or cas/");
-    assert\equal(looksLikeRepoPath("dist/"), false, "the same shape, and never a claim about us");
-    assert\equal(looksLikeRepoPath("~/.codex/config.toml"), false, "the reader's home directory");
-    assert\equal(looksLikeRepoPath(".claude/settings.json"), false, "a file the reader creates");
+    assert\equal(looksLikeRepoPath("gopherbuzz/"), want: false,
+        message: "one segment: indistinguishable from an illustrative dist/ or cas/");
+    assert\equal(looksLikeRepoPath("dist/"), want: false, message: "the same shape, and never a claim about us");
+    assert\equal(looksLikeRepoPath("~/.codex/config.toml"), want: false, message: "the reader's home directory");
+    assert\equal(looksLikeRepoPath(".claude/settings.json"), want: false, message: "a file the reader creates");
 }
 
 test "pathCheckApplies exempts the trees that document someone else's workspace" {
-    assert\equal(pathCheckApplies("docs/concepts/engines.md"), true, "our own architecture");
-    assert\equal(pathCheckApplies("README.md"), true, "repo-root prose");
-    assert\equal(pathCheckApplies("docs/reference/codes/race/MGS4004.md"), false,
-        "diagnostic explainers walk through an example project");
-    assert\equal(pathCheckApplies("docs/guides/integrations/agents.md"), true,
-        "guides are checked like any other page now that the blanket exemption is gone");
-    assert\equal(pathCheckApplies("docs/guides/integrations/pr-advice.md"), false,
-        "names refs/remotes/, a git-internal path in the reader's own clone");
+    assert\equal(pathCheckApplies("docs/concepts/engines.md"), want: true, message: "our own architecture");
+    assert\equal(pathCheckApplies("README.md"), want: true, message: "repo-root prose");
+    assert\equal(pathCheckApplies("docs/reference/codes/race/MGS4004.md"), want: false,
+        message: "diagnostic explainers walk through an example project");
+    assert\equal(pathCheckApplies("docs/guides/integrations/agents.md"), want: true,
+        message: "guides are checked like any other page now that the blanket exemption is gone");
+    assert\equal(pathCheckApplies("docs/guides/integrations/pr-advice.md"), want: false,
+        message: "names refs/remotes/, a git-internal path in the reader's own clone");
 }
 
 test "pathReferences reads prose only, never a command block" {
     final md = "See `internal/gone/x.go` and `docs/render.buzz`.\n\n```sh\nmagus describe file docs/moved.md\n```\n";
     final refs = pathReferences("README.md", md);
-    assert\equal(refs.len(), 2, "both prose references, neither from the fence");
-    assert\equal(refs[0].path, "internal/gone/x.go", "the first reference");
-    assert\equal(refs[0].line, 1, "line number");
-    assert\equal(refs[1].path, "docs/render.buzz", "the second reference");
+    assert\equal(refs.len(), want: 2, message: "both prose references, neither from the fence");
+    assert\equal(refs[0].path, want: "internal/gone/x.go", message: "the first reference");
+    assert\equal(refs[0].line, want: 1, message: "line number");
+    assert\equal(refs[1].path, want: "docs/render.buzz", message: "the second reference");
 }
 
 test "pathReferences resolves a relative markdown link against its own file's directory" {
     final md = "See [server.md](../guides/integrations/server.md) for the server.\n";
     final refs = pathReferences("docs/concepts/concurrency.md", md);
-    assert\equal(refs.len(), 1, "one link finding");
-    assert\equal(refs[0].rule, "missing-link", "rule name");
-    assert\equal(refs[0].path, "docs/guides/integrations/server.md", "resolved repo-root relative");
-    assert\equal(refs[0].line, 1, "line number");
+    assert\equal(refs.len(), want: 1, message: "one link finding");
+    assert\equal(refs[0].rule, want: "missing-link", message: "rule name");
+    assert\equal(refs[0].path, want: "docs/guides/integrations/server.md", message: "resolved repo-root relative");
+    assert\equal(refs[0].line, want: 1, message: "line number");
 }
 
 test "pathReferences skips link targets that are not same-repo relative .md claims" {
     final md = "[anchor](#section) [ext](https://example.com/x.md) [mail](mailto:a@b.co) "
         + "[abs](/reference/faq.md) [asset](../img/logo.png) [ok](../glossary.md#term)\n";
     final refs = pathReferences("docs/guides/tips.md", md);
-    assert\equal(refs.len(), 1, "only the relative .md link with a fragment is a claim");
-    assert\equal(refs[0].path, "docs/glossary.md", "fragment stripped before resolving");
+    assert\equal(refs.len(), want: 1, message: "only the relative .md link with a fragment is a claim");
+    assert\equal(refs[0].path, want: "docs/glossary.md", message: "fragment stripped before resolving");
 }
 
 test "pathReferences ignores a markdown link written inside a fenced block" {
     final md = "```md\n[example](../not-real.md)\n```\n";
-    assert\equal(pathReferences("docs/guides/tips.md", md).len(), 0, "fenced example, not a claim");
+    assert\equal(pathReferences("docs/guides/tips.md", md).len(), want: 0, message: "fenced example, not a claim");
 }

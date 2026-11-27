@@ -1,15 +1,20 @@
 // @expect: 10
 // break abandons a fiber mid-iteration (the unconsumed fiber is simply dropped).
+var __r: any = null;
+
 fun nums() > void *> int? {
     foreach (i in 0..100) {
         _ = yield i;
     }
 }
-var sum = 0;
-foreach (n in &nums()) {
-    if (n >= 5) {
-        break;
+
+fun main(args: [str]) > void !> any {
+    var sum = 0;
+    foreach (n in &nums()) {
+        if (n >= 5) {
+            break;
+        }
+        sum = sum + n;
     }
-    sum = sum + n;
+    __r = sum;
 }
-final __r = sum;

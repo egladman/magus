@@ -27,11 +27,11 @@ export fun writeSEOFiles(site: Site) > result\Result::<bool> {
         foreach (u in sorted) {
             var loc = u;
             if (loc == "index.html") { loc = ""; }
-            body.append("  <url>" + xmlElement("loc", site.inputs.config.baseURL + loc) + "</url>\n");
+            body.append("  <url>" + xmlElement("loc", text: site.inputs.config.baseURL + loc) + "</url>\n");
         }
         body.append("</urlset>\n");
-        fs\writeFile(site.inputs.outDir + "/sitemap.xml", body.join(""));
-        fs\writeFile(site.inputs.outDir + "/robots.txt", "User-agent: *\nAllow: /\nSitemap: " + site.inputs.config.baseURL + "sitemap.xml\n");
+        fs\writeFile(site.inputs.outDir + "/sitemap.xml", content: body.join(""));
+        fs\writeFile(site.inputs.outDir + "/robots.txt", content: "User-agent: *\nAllow: /\nSitemap: " + site.inputs.config.baseURL + "sitemap.xml\n");
         return result\ok::<bool>(true);
     } catch (err: any) {
         return result\caught::<bool>(err);
@@ -46,7 +46,7 @@ export fun writeSEOFiles(site: Site) > result\Result::<bool> {
 // test can pin the output.
 fun llmsIndexBody(pages: mut [DocPage], base: str, title: str) > str {
     final sorted = pages.sort(fun (a: DocPage, b: DocPage) > bool {
-        return strLess(a.url, b.url);
+        return strLess(a.url, b: b.url);
     });
     final body = mut [<str>];
     body.append("# " + title + "\n\n"
@@ -74,7 +74,7 @@ export fun writeLLMsIndex(site: Site) > result\Result::<bool> {
             base = site.inputs.config.baseURL;
             if (base.endsWith("/") == false) { base = base + "/"; }
         }
-        fs\writeFile(site.inputs.outDir + "/llms.txt", llmsIndexBody(site.docPages, base, site.inputs.config.title));
+        fs\writeFile(site.inputs.outDir + "/llms.txt", content: llmsIndexBody(site.docPages, base: base, title: site.inputs.config.title));
         return result\ok::<bool>(true);
     } catch (err: any) {
         return result\caught::<bool>(err);
@@ -95,5 +95,5 @@ test "llmsIndexBody lists docs pages sorted by URL, base-prefixed, with descript
         + "- [Cache](/concepts/cache/index.md): The cache model\n"
         + "- [Targets](/concepts/targets/index.md): What a target is\n"
         + "- [FAQ](/reference/faq/index.md)\n";
-    assert\equal(llmsIndexBody(pages, "/", "magus"), want, "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
+    assert\equal(llmsIndexBody(pages, base: "/", title: "magus"), want: want, message: "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
 }

@@ -1,13 +1,16 @@
 package graph
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"connectrpc.com/connect"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/embedtable"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
@@ -27,6 +30,8 @@ type resolver interface {
 	KnowledgeGraph(ctx context.Context, req types.GraphRequest) (*knowledge.Graph, error)
 	SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, bool)
 	Affected(ctx context.Context, base string) (*types.AffectedResult, error)
+	Graph() (*types.Graph, error)
+	ClassifyFiles(ctx context.Context, paths []string) ([]types.FileEntry, error)
 }
 
 // Service implements graphv1alpha1connect.GraphServiceHandler over the workspace knowledge
@@ -315,25 +320,64 @@ func (s *Service) FindAffected(
 ) (*connect.Response[graphv1.Affected], error) {
 	// An empty base is not a missing argument: Affected resolves it from magus.yaml, the env and
 	// the run history, so a browser caller never has to know the repo's base ref.
-	r, err := s.ws.Affected(ctx, req.Msg.GetBase())
+	base := req.Msg.GetBase()
+	r, err := s.ws.Affected(ctx, base)
 	if err != nil {
-		// A VCS that cannot produce a definitive diff is an ANSWER, not a failure: the caller must
-		// tell "nothing is affected" from "I could not tell", and CodeInternal collapses both.
-		if errors.Is(err, types.ErrAffectedFallback) {
-			return connect.NewResponse(&graphv1.Affected{Fallback: err.Error()}), nil
-		}
+		return affectedError(err)
+	}
+	p, ok := s.ws.(planner)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("graph: this workspace offers no shard planner, so it cannot say what to run"))
+	}
+	target := cmp.Or(req.Msg.GetTarget(), types.TargetCI)
+	plan, err := p.Plan(ctx, target, magus.PlanOptions{BaseRef: base, MaxShards: -1})
+	if err != nil {
+		return affectedError(err)
+	}
+	g, err := s.ws.Graph()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	files, err := s.ws.ClassifyFiles(ctx, r.Changed)
+	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	ids := make([]string, 0, len(r.Affected))
-	for _, p := range r.Affected {
-		ids = append(ids, fmt.Sprintf("%s:%s", types.KindProject, p))
+	reasons := make([]*graphv1.AffectedReason, 0, len(r.Affected))
+	for _, path := range r.Affected {
+		ids = append(ids, projectID(path))
+		reasons = append(reasons, &graphv1.AffectedReason{
+			Id:     projectID(path),
+			Seed:   slices.Contains(r.Seed, path),
+			Chains: chainsToProto(g.PathsFromSeeds(r.Seed, path)),
+		})
 	}
 	return connect.NewResponse(&graphv1.Affected{
 		Base:         r.Base,
 		ChangedFiles: int32(len(r.Changed)),
 		Ids:          ids,
+		Seeds:        seedsToProto(r, files),
+		Reasons:      reasons,
+		Plan:         planToProto(target, base, plan),
 	}), nil
 }
+
+// planner is the shard planner behind `magus affected --plan`. Its options are the root
+// package's, so the resolver seam does not carry it.
+type planner interface {
+	Plan(ctx context.Context, target string, opts magus.PlanOptions) (types.ShardPlan, error)
+}
+
+// affectedError keeps a diff the VCS could not compute an answer. "I could not tell" differs
+// from "nothing is affected", and CodeInternal would collapse the two.
+func affectedError(err error) (*connect.Response[graphv1.Affected], error) {
+	if errors.Is(err, types.ErrAffectedFallback) {
+		return connect.NewResponse(&graphv1.Affected{Fallback: err.Error()}), nil
+	}
+	return nil, connect.NewError(connect.CodeInternal, err)
+}
+
+func projectID(path string) string { return fmt.Sprintf("%s:%s", types.KindProject, path) }
 
 func (s *Service) GetGraphStats(
 	ctx context.Context, req *connect.Request[graphv1.GetGraphStatsRequest],

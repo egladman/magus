@@ -1,8 +1,10 @@
 import "std";
 import "fs";
 
-try {
-    fs\writeLines("dist/targets.txt", ["build", "test", "lint"]);
-} catch (e) {
-    std\print("could not write dist/targets.txt");
+fun main(args: [str]) > void {
+    try {
+        fs\writeLines("dist/targets.txt", lines: ["build", "test", "lint"]);
+    } catch (e) {
+        std\print("could not write dist/targets.txt");
+    }
 }

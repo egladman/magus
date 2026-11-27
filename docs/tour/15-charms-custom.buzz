@@ -24,8 +24,8 @@ fun lint(t: Target) > Command {
         bin = "golangci-lint",
         args = args,
         charms = {
-            "fix":     after(args, "run", ["--fix"]),
-            "verbose": append(["-v"]),
+            "fix":     after(args, anchor: "run", vals: ["--fix"]),
+            "verbose": append(vals: ["-v"]),
         },
     };
 }

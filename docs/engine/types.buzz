@@ -501,7 +501,7 @@ export object Site {
     fun collectAlias(alias: str, target: str) > void {
         var a = alias;
         while (a.startsWith("/")) { a = a.sub(1); }
-        while (a.endsWith("/")) { a = a.sub(0, a.len() - 1); }
+        while (a.endsWith("/")) { a = a.sub(0, len: a.len() - 1); }
         if (a == "") { return; }
         final owner = this.aliasTarget[a];
         if (owner != null and owner != target) {
@@ -519,10 +519,10 @@ export object Site {
                 if (this.pageUrls[a + "/"] != null or this.pageUrls[a] != null) {
                     return result\fail::<bool>("alias \"" + a + "\" collides with a real page at the same path");
                 }
-                makeOutputDir(this.inputs.outDir + "/" + a, "alias \"" + a + "\"", a + "/");
-                final rel = relativePath(a, this.aliasTarget[a]);
+                makeOutputDir(this.inputs.outDir + "/" + a, what: "alias \"" + a + "\"", url: a + "/");
+                final rel = relativePath(a, toUrl: this.aliasTarget[a]);
                 final csp = cspForRedirectStub(redirectScript(rel));
-                fs\writeFile(fs\join(this.inputs.outDir, a, "index.html"), aliasStub(rel, csp));
+                fs\writeFile(fs\join(this.inputs.outDir, name: a, file: "index.html"), content: aliasStub(rel, csp: csp));
                 this.writtenPaths[a + "/index.html"] = true;
             }
             return result\ok::<bool>(true);
@@ -535,7 +535,7 @@ export object Site {
     // (the relatedness/breadcrumb set). rel is the path under docs/.
     fun collectDocPage(rel: str) > result\Result::<bool> {
         try {
-            final f = io\File.open(this.inputs.root + "/" + this.inputs.docs + "/" + rel, io\FileMode.read);
+            final f = io\File.open(this.inputs.root + "/" + this.inputs.docs + "/" + rel, mode: io\FileMode.read);
             final md = f.readAll();
             f.close();
             final fm = serialize\jsonDecode(markdown\frontmatter(md));
@@ -552,7 +552,7 @@ export object Site {
                 if (o > 0) { order = o; }
             }
             final desc = fm.q("description").stringValue();
-            final url = cleanURL(rel, this.inputs.blog);
+            final url = cleanURL(rel, blogDir: this.inputs.blog);
             // Join tags with "||" (never present in a tag) so the record stays flat;
             // newDocIndex splits it back out.
             final tagParts = mut [<str>];
@@ -637,28 +637,28 @@ export object Site {
             // becomes the leaf). srcRel is blog/<file>.md for posts, or blog/index.md for
             // the listing page.
             if (srcRel == this.inputs.blog + "/index.md") {
-                return result\ok::<str>(template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Blog</li>"}));
+                return result\ok::<str>(template\render(bcTmpl, data: {"li": li + "<li aria-current=\"page\">Blog</li>"}));
             }
             // The search page is a top-level tool page: Home / Search (no Documentation
             // root, it does not hang off the documentation index).
             if (srcRel == "search/index.md") {
-                return result\ok::<str>(template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Search</li>"}));
+                return result\ok::<str>(template\render(bcTmpl, data: {"li": li + "<li aria-current=\"page\">Search</li>"}));
             }
             // The tour page is a top-level onboarding page: Home / Tour.
             if (srcRel == "tour/index.md") {
-                return result\ok::<str>(template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Tour</li>"}));
+                return result\ok::<str>(template\render(bcTmpl, data: {"li": li + "<li aria-current=\"page\">Tour</li>"}));
             }
             if (srcRel.startsWith(this.inputs.blog + "/")) {
                 li = li + "<li><a href=\"" + root + "blog/\">Blog</a></li>"
                     + "<li aria-current=\"page\">" + title + "</li>";
-                return result\ok::<str>(template\render(bcTmpl, {"li": li}));
+                return result\ok::<str>(template\render(bcTmpl, data: {"li": li}));
             }
             // The /public/ autoindex tree also skips the Documentation root; each level
             // gets a bare Home / <path> breadcrumb (the autoindex itself lists the parent
             // link in its own body, so the breadcrumb stays flat).
             if (srcRel.startsWith("public/")) {
                 li = li + "<li aria-current=\"page\">" + title + "</li>";
-                return result\ok::<str>(template\render(bcTmpl, {"li": li}));
+                return result\ok::<str>(template\render(bcTmpl, data: {"li": li}));
             }
 
             // /development/ contributor page. Home / Development for the landing (which is
@@ -672,13 +672,13 @@ export object Site {
                     li = li + "<li><a href=\"" + root + "development/\">Development</a></li>"
                         + "<li aria-current=\"page\">" + title + "</li>";
                 }
-                return result\ok::<str>(template\render(bcTmpl, {"li": li}));
+                return result\ok::<str>(template\render(bcTmpl, data: {"li": li}));
             }
 
             // The documentation index roots every docs trail; on that page itself it is
             // the current leaf rather than a link back to where you already are.
             if (rel == "documentation.md") {
-                return result\ok::<str>(template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Documentation</li>"}));
+                return result\ok::<str>(template\render(bcTmpl, data: {"li": li + "<li aria-current=\"page\">Documentation</li>"}));
             }
             li = li + "<li><a href=\"" + root + "documentation/\">Documentation</a></li>";
 
@@ -720,7 +720,7 @@ export object Site {
 
             // The leaf is the current page's own title, matching how the intermediate crumbs read.
             li = li + "<li aria-current=\"page\">" + title + "</li>";
-            return result\ok::<str>(template\render(bcTmpl, {"li": li}));
+            return result\ok::<str>(template\render(bcTmpl, data: {"li": li}));
         } catch (err: any) {
             return result\caught::<str>(err);
         }
@@ -823,7 +823,7 @@ export object Site {
 {{/picks}}
     </div>
   </section>
-`, {"root": root, "picks": picks}));
+`, data: {"root": root, "picks": picks}));
         } catch (err: any) {
             return result\caught::<str>(err);
         }
@@ -878,7 +878,7 @@ export object Site {
                 }
             }
             if (kids.len() == 0) { return result\ok::<str>(""); }
-            final ordered = kids.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["url"], b["url"]); });
+            final ordered = kids.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["url"], b: b["url"]); });
 
             // Render through Mustache so {{title}} is HTML-escaped in both the link text and the
             // title attribute.
@@ -892,7 +892,7 @@ export object Site {
           <li><a href="{{root}}{{url}}"{{#current}} aria-current="page"{{/current}} title="{{title}}">{{title}}</a></li>
 {{/picks}}
         </ul>
-`, {"root": root, "picks": picks}));
+`, data: {"root": root, "picks": picks}));
         } catch (err: any) {
             return result\caught::<str>(err);
         }
@@ -932,7 +932,7 @@ export object Site {
             if (rows.len() > maxSubtreeRows) { return result\ok::<str>(""); }
 
             final ordered = rows.sort(fun (a: {str: any}, b: {str: any}) > bool {
-                return strLess("{a["url"]}", "{b["url"]}");
+                return strLess("{a["url"]}", b: "{b["url"]}");
             });
             var picks: mut [{str: any}] = mut [<{str: any}>];
             foreach (r in ordered) {
@@ -944,7 +944,7 @@ export object Site {
           <li class="subtree-d{{depth}}"><a href="{{root}}{{url}}" title="{{title}}">{{title}}</a></li>
 {{/picks}}
         </ul>
-`, {"root": root, "picks": picks}));
+`, data: {"root": root, "picks": picks}));
         } catch (err: any) {
             return result\caught::<str>(err);
         }
@@ -973,7 +973,7 @@ export object Site {
     // collectGlossaryTerms), so every page's render can hint its convention markers.
     fun collectConventions() > void {
         final path = this.inputs.root + "/" + this.inputs.docs + "/conventions.md";
-        final f = io\File.open(path, io\FileMode.read);
+        final f = io\File.open(path, mode: io\FileMode.read);
         final md = f.readAll();
         f.close();
         this.inputs.conventions = parseConventions(md);
@@ -988,7 +988,7 @@ export object Site {
     fun collectPageTerms() > void {
         foreach (p in this.docPages) {
             if (p.srcRel == this.inputs.docs + "/glossary.md") { continue; }
-            final f = io\File.open(this.inputs.root + "/" + p.srcRel, io\FileMode.read);
+            final f = io\File.open(this.inputs.root + "/" + p.srcRel, mode: io\FileMode.read);
             final md = f.readAll().lower();
             f.close();
             // Which glossary terms this page MENTIONS - a native indexOf sweep over the raw
@@ -1007,7 +1007,7 @@ export object Site {
     // summary), or "" if absent.
     fun fileDescription(path: str) > result\Result::<str> {
         try {
-            final f = io\File.open(path, io\FileMode.read);
+            final f = io\File.open(path, mode: io\FileMode.read);
             final md = f.readAll();
             f.close();
             return result\ok::<str>(serialize\jsonDecode(markdown\frontmatter(md)).q("description").stringValue());
@@ -1098,7 +1098,7 @@ export object Site {
                 foreach (name in fs\listDir(buzzBase)) {
                     if (name.endsWith(".md") == false or name == "index.md" or name == "README.md") { continue; }
                     final mod = name.sub(0, len: name.len() - 3);
-                    final f = io\File.open(buzzBase + "/" + name, io\FileMode.read);
+                    final f = io\File.open(buzzBase + "/" + name, mode: io\FileMode.read);
                     final md = f.readAll();
                     f.close();
                     foreach (line in md.split("\n")) {
@@ -1121,7 +1121,7 @@ export object Site {
             // which would collide with glossary terms and prose. Anchored to the key's H2 section.
             final configPath = this.inputs.root + "/" + this.inputs.docs + "/reference/config.md";
             if (fs\exists(configPath)) {
-                final f = io\File.open(configPath, io\FileMode.read);
+                final f = io\File.open(configPath, mode: io\FileMode.read);
                 final md = f.readAll();
                 f.close();
                 var section = "";
@@ -1181,29 +1181,29 @@ export object Site {
 // identity for maps, so assert.equal does the value comparison.
 test "Site.collectAlias trims slashes and records every alias" {
     final s = newSite();
-    s.collectAlias("/old-path/", "new-path/");
-    s.collectAlias("same", "same/");
-    assert\equal(s.aliasTarget, {"old-path": "new-path/", "same": "same/"}, "both aliases recorded with slashes trimmed");
+    s.collectAlias(alias: "/old-path/", target: "new-path/");
+    s.collectAlias(alias: "same", target: "same/");
+    assert\equal(s.aliasTarget, want: {"old-path": "new-path/", "same": "same/"}, message: "both aliases recorded with slashes trimmed");
 }
 
 test "Site.addRecord marks the URL written and appends one search record" {
     final s = newSite();
-    final added = s.addRecord("guide/", "Guide", "", "---\ntitle: Guide\n---\nBody text.");
-    assert\equal(added.error == null, true, "addRecord succeeds");
-    assert\equal(s.pageUrls, {"guide/": true}, "url marked written");
-    assert\len(s.searchRecords, 1, "one search record appended");
+    final added = s.addRecord(url: "guide/", title: "Guide", desc: "", md: "---\ntitle: Guide\n---\nBody text.");
+    assert\equal(added.error == null, want: true, message: "addRecord succeeds");
+    assert\equal(s.pageUrls, want: {"guide/": true}, message: "url marked written");
+    assert\len(s.searchRecords, want: 1, message: "one search record appended");
 }
 
 test "Site.latestStable passes over a newer release candidate" {
     final s = newSite();
-    assert\equal(s.latestStable() == null, true, "nothing shipped yet");
+    assert\equal(s.latestStable() == null, want: true, message: "nothing shipped yet");
     s.inputs.releases.append(Release{ version = "v0.5.0-rc.1" });
-    assert\equal(s.latestStable() == null, true, "a candidate alone is not a stable release");
+    assert\equal(s.latestStable() == null, want: true, message: "a candidate alone is not a stable release");
     s.inputs.releases.append(Release{ version = "v0.4.3+build-1" });
     s.inputs.releases.append(Release{ version = "v0.4.2" });
     final latest = s.latestStable();
-    assert\equal(latest != null, true, "a stable release is found");
-    assert\equal(latest!.version, "v0.4.3+build-1", "build metadata is not a prerelease");
+    assert\equal(latest != null, want: true, message: "a stable release is found");
+    assert\equal(latest!.version, want: "v0.4.3+build-1", message: "build metadata is not a prerelease");
 }
 
 
@@ -1219,12 +1219,12 @@ test "renderSectionNav lists an overview's direct children and marks the current
     s.docPages.append(DocPage{ url = "targets/", title = "Targets", srcRel = "docs/targets.md", section = "targets" });
 
     s.collectDocIndex();
-    final got = s.renderSectionNav("docs/spells/go.md", "spells/go/", "../../").value!;
-    assert\equal(got.indexOf("In this section") != null, true, "section label present");
-    assert\equal(got.indexOf("href=\"../../spells/bash/\"") != null, true, "sibling bash listed");
-    assert\equal(got.indexOf("aria-current=\"page\" title=\"go\"") != null, true, "current page marked");
-    assert\equal(got.indexOf("spells/go/nested/") != null, false, "grandchild is not a direct child");
-    assert\equal(got.indexOf("targets/") != null, false, "an unrelated section is excluded");
+    final got = s.renderSectionNav(srcRel: "docs/spells/go.md", curUrl: "spells/go/", root: "../../").value!;
+    assert\equal(got.indexOf("In this section") != null, want: true, message: "section label present");
+    assert\equal(got.indexOf("href=\"../../spells/bash/\"") != null, want: true, message: "sibling bash listed");
+    assert\equal(got.indexOf("aria-current=\"page\" title=\"go\"") != null, want: true, message: "current page marked");
+    assert\equal(got.indexOf("spells/go/nested/") != null, want: false, message: "grandchild is not a direct child");
+    assert\equal(got.indexOf("targets/") != null, want: false, message: "an unrelated section is excluded");
 }
 
 test "renderSectionNav returns empty for a childless page with no overview ancestor" {
@@ -1232,7 +1232,7 @@ test "renderSectionNav returns empty for a childless page with no overview ances
     s.docPages.append(DocPage{ url = "targets/", title = "Targets", srcRel = "docs/targets.md", section = "targets" });
     s.docPages.append(DocPage{ url = "cache/", title = "Cache", srcRel = "docs/cache.md", section = "cache" });
     s.collectDocIndex();
-    assert\equal(s.renderSectionNav("docs/targets.md", "targets/", "../").value!, "", "no section nav for a leaf with no children");
+    assert\equal(s.renderSectionNav(srcRel: "docs/targets.md", curUrl: "targets/", root: "../").value!, want: "", message: "no section nav for a leaf with no children");
 }
 
 test "renderSectionNav lists a non-overview parent's own direct children" {
@@ -1242,10 +1242,10 @@ test "renderSectionNav lists a non-overview parent's own direct children" {
     s.docPages.append(DocPage{ url = "targets/ci/", title = "CI", srcRel = "docs/targets/ci.md", section = "targets" });
     s.docPages.append(DocPage{ url = "targets/ci/deep/", title = "Deep", srcRel = "docs/targets/ci/deep.md", section = "targets" });
     s.collectDocIndex();
-    final got = s.renderSectionNav("docs/targets.md", "targets/", "../").value!;
-    assert\equal(got.indexOf("In this section") != null, true, "child list present for a non-overview parent");
-    assert\equal(got.indexOf("href=\"../targets/ci/\"") != null, true, "direct child listed");
-    assert\equal(got.indexOf("targets/ci/deep/") != null, false, "a grandchild is not a direct child");
+    final got = s.renderSectionNav(srcRel: "docs/targets.md", curUrl: "targets/", root: "../").value!;
+    assert\equal(got.indexOf("In this section") != null, want: true, message: "child list present for a non-overview parent");
+    assert\equal(got.indexOf("href=\"../targets/ci/\"") != null, want: true, message: "direct child listed");
+    assert\equal(got.indexOf("targets/ci/deep/") != null, want: false, message: "a grandchild is not a direct child");
 }
 
 test "renderRelated ranks neighbors by shared glossary terms over shared tags" {
@@ -1262,11 +1262,11 @@ test "renderRelated ranks neighbors by shared glossary terms over shared tags" {
         "concepts/tagsy/": "",
     };
     s.collectDocIndex();
-    final got = s.renderRelated("docs/concepts/cache.md", "../../").value!;
+    final got = s.renderRelated(srcRel: "docs/concepts/cache.md", root: "../../").value!;
     final iDeps = got.indexOf("concepts/deps/");
     final iTagsy = got.indexOf("concepts/tagsy/");
-    assert\equal(iDeps != null and iTagsy != null, true, "both neighbors listed");
-    assert\equal(iDeps! < iTagsy!, true, "the shared-term neighbor outranks the shared-tag-only one");
+    assert\equal(iDeps != null and iTagsy != null, want: true, message: "both neighbors listed");
+    assert\equal(iDeps! < iTagsy!, want: true, message: "the shared-term neighbor outranks the shared-tag-only one");
 }
 
 test "builtDocIndex is an error until collectDocIndex runs" {
@@ -1299,12 +1299,12 @@ test "renderSubtree lists the whole branch, nested by depth" {
     s.docPages.append(DocPage{ url = "concepts/targets/ci/", title = "CI", srcRel = "docs/concepts/targets/ci.md", section = "concepts" });
     s.docPages.append(DocPage{ url = "guides/", title = "Guides", srcRel = "docs/guides.md", section = "guides" });
 
-    final got = s.renderSubtree("concepts/", "../").value!;
-    assert\equal(got.indexOf("Everything here") != null, true, "subtree label present");
-    assert\equal(got.indexOf("subtree-d1") != null, true, "a direct child is depth 1");
-    assert\equal(got.indexOf("subtree-d2") != null, true, "a grandchild is depth 2 - the whole point");
-    assert\equal(got.indexOf("href=\"../concepts/targets/ci/\"") != null, true, "grandchild is reachable");
-    assert\equal(got.indexOf("guides/") != null, false, "an unrelated branch is excluded");
+    final got = s.renderSubtree(curUrl: "concepts/", root: "../").value!;
+    assert\equal(got.indexOf("Everything here") != null, want: true, message: "subtree label present");
+    assert\equal(got.indexOf("subtree-d1") != null, want: true, message: "a direct child is depth 1");
+    assert\equal(got.indexOf("subtree-d2") != null, want: true, message: "a grandchild is depth 2 - the whole point");
+    assert\equal(got.indexOf("href=\"../concepts/targets/ci/\"") != null, want: true, message: "grandchild is reachable");
+    assert\equal(got.indexOf("guides/") != null, want: false, message: "an unrelated branch is excluded");
 }
 
 test "renderSubtree stays quiet when it would repeat the section list" {
@@ -1312,8 +1312,8 @@ test "renderSubtree stays quiet when it would repeat the section list" {
     // Only direct children: renderSectionNav already shows exactly this.
     s.docPages.append(DocPage{ url = "guides/", title = "Guides", srcRel = "docs/guides.md", overview = true, section = "guides" });
     s.docPages.append(DocPage{ url = "guides/mcp/", title = "MCP", srcRel = "docs/guides/mcp.md", section = "guides" });
-    assert\equal(s.renderSubtree("guides/", "../").value!, "", "one level deep adds nothing over In this section");
-    assert\equal(s.renderSubtree("", "../").value!, "", "no url, no subtree");
+    assert\equal(s.renderSubtree(curUrl: "guides/", root: "../").value!, want: "", message: "one level deep adds nothing over In this section");
+    assert\equal(s.renderSubtree(curUrl: "", root: "../").value!, want: "", message: "no url, no subtree");
 }
 
 test "renderSubtree refuses to become a wall of links" {
@@ -1324,6 +1324,6 @@ test "renderSubtree refuses to become a wall of links" {
     for (var i = 0; i < maxSubtreeRows + 1; i = i + 1) {
         s.docPages.append(DocPage{ url = "all/p" + i + "/", title = "P" + i, srcRel = "docs/all/p.md", section = "all" });
     }
-    assert\equal(s.renderSubtree("all/", "../").value!, "",
-        "a branch too big for a sidebar wants a section index page, not a dump");
+    assert\equal(s.renderSubtree(curUrl: "all/", root: "../").value!, want: "",
+        message: "a branch too big for a sidebar wants a section index page, not a dump");
 }

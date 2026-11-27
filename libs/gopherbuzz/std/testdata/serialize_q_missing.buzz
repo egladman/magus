@@ -5,13 +5,16 @@
 // @expect: [0, 0, ]
 import "serialize";
 var __r: any = null;
-try {
-    final boxed = serialize\jsonDecode(`{"a": [1]}`);
-    __r = [
-        boxed.q(["missing"]).integerValue(),
-        boxed.q(["a", 9]).integerValue(),
-        boxed.q(["missing"]).stringValue(),
-    ];
-} catch (err: serialize\JsonParseError) {
-    throw err;
+
+fun main(args: [str]) > void !> any {
+    try {
+        final boxed = serialize\jsonDecode(`{"a": [1]}`);
+        __r = [
+            boxed.q(["missing"]).integerValue(),
+            boxed.q(["a", 9]).integerValue(),
+            boxed.q(["missing"]).stringValue(),
+        ];
+    } catch (err: serialize\JsonParseError) {
+        throw err;
+    }
 }

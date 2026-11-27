@@ -92,23 +92,23 @@ Prompt the reader to choose one of items and return its index. Type to filter (m
 import "std";
 import "term";
 
-// A prompt is the interactive spelling of a flag. The flag wins when it was
-// passed, and a person on a terminal who left it off is asked. With nothing to
-// ask on, or when the reader cancels with ESC or Ctrl-C (pick raises), nothing
-// is chosen: the run says which flag it needed.
-final projects = ["console", "docs", "libs/gopherbuzz"];
-final given: str? = null;
+fun main(args: [str]) > void {
+    // A prompt is the interactive spelling of a flag. The flag wins when passed.
+    // With nothing to ask on, or a cancel, the run says which flag it needed.
+    final projects = ["console", "docs", "libs/gopherbuzz"];
+    final given: str? = null;
 
-if (given -> project) {
-    std\print(project);
-} else if (!term\isInteractive()) {
-    std\print("--project is required (no terminal to ask on)");
-} else {
-    try {
-        final picked = projects[term\pick(projects, prompt: "project")];
-        std\print(term\colorize(picked, style: term\TermStyle.brightGreen));
-    } catch (e) {
-        std\print("no project chosen: pass --project");
+    if (given -> project) {
+        std\print(project);
+    } else if (!term\isInteractive()) {
+        std\print("--project is required (no terminal to ask on)");
+    } else {
+        try {
+            final picked = projects[term\pick(projects, prompt: "project")];
+            std\print(term\colorize(picked, style: term\TermStyle.brightGreen));
+        } catch (e) {
+            std\print("no project chosen: pass --project");
+        }
     }
 }
 ```
@@ -147,18 +147,20 @@ Ask the reader a yes or no question and return true only for yes. Ask once per r
 import "std";
 import "term";
 
-// Ask once, right before the step that cannot be taken back, after printing
-// what it will do. The flag that already says yes answers for an unattended
-// run, and a cancel (confirm raises) is a no.
-final apply = false;
-std\print("would remove 3 worktrees, freeing 2.1 GiB");
+fun main(args: [str]) > void {
+    // Ask once, right before the step that cannot be undone.
+    // The flag that already says yes answers for an unattended run.
+    // A cancel (confirm raises) is a no.
+    final apply = false;
+    std\print("would remove 3 worktrees, freeing 2.1 GiB");
 
-var proceed = apply;
-if (!apply and term\isInteractive()) {
-    proceed = term\confirm("remove 3 worktrees?") catch false;
-}
-if (!proceed) {
-    std\print("dry run: pass --apply to remove them");
+    var proceed = apply;
+    if (!apply and term\isInteractive()) {
+        proceed = term\confirm("remove 3 worktrees?") catch false;
+    }
+    if (!proceed) {
+        std\print("dry run: pass --apply to remove them");
+    }
 }
 ```
 
@@ -182,15 +184,17 @@ import "proc";
 import "std";
 import "term";
 
-// A loader turns while the subprocess blocks and is erased when it returns.
-// proc captures the command's output, so nothing writes under the loader.
-final survey = fun () > any !> any => proc\exec("du", args: ["-sk", "."]).stdout;
+fun main(args: [str]) > void {
+    // A loader turns while the subprocess blocks and is erased when it returns.
+    // proc captures the command's output, so nothing writes under the loader.
+    final survey = fun () > any !> any => proc\exec("du", args: ["-sk", "."]).stdout;
 
-try {
-    final usage = if (term\isInteractive()) term\spin("surveying the disk", run: survey) else survey();
-    std\print("{usage}");
-} catch (e) {
-    std\print("du failed");
+    try {
+        final usage = if (term\isInteractive()) term\spin("surveying the disk", run: survey) else survey();
+        std\print("{usage}");
+    } catch (e) {
+        std\print("du failed");
+    }
 }
 ```
 

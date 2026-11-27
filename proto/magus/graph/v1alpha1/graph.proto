@@ -87,7 +87,8 @@ service GraphService {
   // card should not carry it.
   rpc FindDependents(FindDependentsRequest) returns (Dependents);
   // FindAffected returns the projects a VCS diff reaches, as graph node ids, so a viewer can
-  // highlight what the working tree touches. `magus affected` over the wire.
+  // highlight what the working tree touches, with why each is reached and what to run.
+  // `magus affected` with --impact, --explain and --plan over the wire.
   //
   // Read-only like the rest of the service, but the only verb here that reads the VCS rather
   // than the graph, so it is the only one whose answer changes while the graph stands still.
@@ -221,17 +222,82 @@ message FindAffectedRequest {
   // same resolution `magus affected` uses - so a caller with no opinion gets the one the repo
   // already agreed on.
   string base = 1;
+  // target is the target the plan runs, as `magus affected <target> --plan` takes it. Empty
+  // plans `ci`, the run `magus affected --impact` names as its follow-up; the plan echoes it.
+  string target = 2;
 }
 
-// Affected is the reach of one VCS diff: which projects a change forces work in.
+// Affected is the reach of one VCS diff: which projects a change forces work in, why, and what
+// runs over them.
 message Affected {
   string base = 1; // the ref actually diffed against, after resolution
   int32 changed_files = 2; // how many paths the diff carried
   repeated string ids = 3; // project node ids in the transitive reverse closure, sorted
   // fallback is why the answer is not definitive: a shallow clone, no VCS, an unreadable base.
-  // ids is empty whenever it is set, and the two are read together - an empty ids with no
-  // fallback means the diff genuinely reaches nothing, which is a real answer.
+  // ids, seeds, reasons and plan are empty whenever it is set, and the two are read together -
+  // an empty ids with no fallback means the diff genuinely reaches nothing, which is a real
+  // answer.
   string fallback = 4;
+  // seeds are the paths the diff carried, sorted, each with the project that owns it.
+  repeated AffectedSeed seeds = 5;
+  // reasons says why each project in ids is there, in ids order: `magus affected --explain`
+  // for every project at once.
+  repeated AffectedReason reasons = 6;
+  // plan is what runs over the set: `magus affected <target> --plan`, flattened to its units.
+  AffectedPlan plan = 7;
+}
+
+// AffectedSeed is one changed path and what it seeds.
+message AffectedSeed {
+  string path = 1; // workspace-relative, slash-separated
+  // project is the project node id the affected set charged the path to; empty when the path
+  // sits outside every project and seeds nothing.
+  string project = 2;
+  // role is the path's role as `magus describe file` gives it: "output" (generated: regenerate
+  // it, never hand-edit), "source", "maintained" or "unclaimed".
+  string role = 3;
+  // undeclared is true when no project declares the path, so it seeds its project by
+  // directory containment alone and moves no cache key.
+  bool undeclared = 4;
+}
+
+// AffectedReason is why one project is in the affected set.
+message AffectedReason {
+  string id = 1; // the project node id, as it appears in ids
+  bool seed = 2; // a changed path sits in the project itself
+  // chains are the shortest chain from each seed that reaches the project.
+  repeated AffectedChain chains = 3;
+}
+
+// AffectedChain is one route a change took from its seed to a project.
+message AffectedChain {
+  string seed = 1; // the project node id holding the changed paths
+  // steps walk from the seed to the project, each a depends_on edge walked against its own
+  // direction (forward=false), since the dependent is the edge's source. Empty when the
+  // project is the seed.
+  repeated PathStep steps = 2;
+}
+
+// AffectedPlan is the shard plan for one target over the affected set, flattened: a viewer
+// asks what runs, not how it packs onto runners.
+message AffectedPlan {
+  string target = 1; // the target planned
+  string source = 2; // what the plan computed the set from, e.g. "git diff vs origin/main"
+  // units are what runs: stage zero's units first, then each shard's, in plan order.
+  repeated PlanUnit units = 3;
+  // unreached are units of affected projects whose closures read no changed path, sorted.
+  // Each replays from the cache, so no shard runs it.
+  repeated PlanUnit unreached = 4;
+  // unbounded_by, when set, says why the set is not a proof: the diff edits a declaration, a
+  // dependency manifest or a toolchain pin, or touches a path no project claims.
+  string unbounded_by = 5;
+  string command = 6; // the command that runs the plan, e.g. "magus affected ci"
+}
+
+// PlanUnit is one target of one project.
+message PlanUnit {
+  string project = 1; // the project node id
+  string target = 2; // the target name
 }
 
 message Path {

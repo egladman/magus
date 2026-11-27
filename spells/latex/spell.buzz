@@ -58,7 +58,7 @@ fun chktex(target: Target) > Command {
 fun latexindent(target: Target) > Command {
     final args = ["-k", "-s", "-g=/dev/null", "-c=build/latexindent"];
     return Command{bin = "latexindent", args = args, sources = ["**/*.tex", "**/*.sty", "**/*.cls"], sourcesEach = true, edits = ["**/*.tex", "**/*.sty", "**/*.cls"], charms = {
-        "rw": set(args, "-k", "-wd"),
+        "rw": set(args, anchor: "-k", val: "-wd"),
     }};
 }
 

@@ -80,14 +80,14 @@ export fun magusConfig() > Config {
 
 test "the site CSP carries one script-src hash per playground.html inline script" {
     final got = computeCSP(CSP_IMG_SRC_DEFAULT, scriptSrc: CSP_SCRIPT_SRC, inlineScriptFiles: CSP_INLINE_SCRIPT_SOURCES);
-    assert\equal(got.indexOf("'wasm-unsafe-eval'") != null, true, "wasm-unsafe-eval present for the playground's wasm runtime");
-    final f = io\File.open("playground.html", io\FileMode.read);
+    assert\equal(got.indexOf("'wasm-unsafe-eval'") != null, want: true, message: "wasm-unsafe-eval present for the playground's wasm runtime");
+    final f = io\File.open("playground.html", mode: io\FileMode.read);
     final n = extractInlineScripts(f.readAll()).len();
     f.close();
-    assert\equal(got.split("'sha256-").len() - 1, n, "one script-src hash per playground.html inline script");
+    assert\equal(got.split("'sha256-").len() - 1, want: n, message: "one script-src hash per playground.html inline script");
 }
 
 test "only the badge CSP carries the badge hosts" {
     final withBadges = computeCSP(CSP_IMG_SRC_BADGES, scriptSrc: CSP_SCRIPT_SRC, inlineScriptFiles: []);
-    assert\equal(withBadges.indexOf("img-src 'self' data: https://github.com https://pkg.go.dev;") != null, true, "badge img-src carries both badge hosts, verbatim");
+    assert\equal(withBadges.indexOf("img-src 'self' data: https://github.com https://pkg.go.dev;") != null, want: true, message: "badge img-src carries both badge hosts, verbatim");
 }

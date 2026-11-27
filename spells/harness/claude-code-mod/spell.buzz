@@ -55,18 +55,18 @@ export fun mgs_listSettings() > [Setting] {
 }
 
 test "mgs_renderPrompts writes no approval file" {
-    assert\equal(mgs_renderPrompts({"bench": "spends tokens"}).len(), 0, "no guard, no prompt file");
+    assert\equal(mgs_renderPrompts({"bench": "spends tokens"}).len(), want: 0, message: "no guard, no prompt file");
 }
 
 test "mgs_getName is the harness id describe and verify look up" {
-    assert\equal(mgs_getName(), "claude-code-mod", "id must match magus\\harness.provider wiring and --id");
+    assert\equal(mgs_getName(), want: "claude-code-mod", message: "id must match magus\\harness.provider wiring and --id");
 }
 
 test "the settings register the marketplace and enable the mod in Claude Code settings" {
     final settings = mgs_listSettings();
-    assert\equal(settings.len(), 2, "a marketplace and a plugin");
+    assert\equal(settings.len(), want: 2, message: "a marketplace and a plugin");
     foreach (s in settings) {
-        assert\equal(s.path, SETTINGS_PATH, "the project settings Claude Code reads");
+        assert\equal(s.path, want: SETTINGS_PATH, message: "the project settings Claude Code reads");
     }
-    assert\equal(settings[1].key.join(","), "enabledPlugins,magus@magus", "the install id is <plugin>@<marketplace>");
+    assert\equal(settings[1].key.join(","), want: "enabledPlugins,magus@magus", message: "the install id is <plugin>@<marketplace>");
 }

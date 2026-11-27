@@ -392,7 +392,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			}}},
 			"go-mod-json": {Command: spells.Command{Bin: "go", Args: []string{"mod", "edit", "-json"}, Capture: true, Quiet: true}},
 			"go-run":      {Command: spells.Command{Bin: "go", Args: []string{"run"}, Hints: goldenGoModHints}},
-			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-d"}, Sources: []string{"**/*.go", "!**/.*/**"}, Edits: []string{"**/*.go", "!**/.*/**"}, Charms: map[string]spells.Charm{
+			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-d"}, Sources: []string{"**/*.go", "!**/.*/**"}, Edits: []string{"**/*.go", "!**/.*/**"},
+				PathScope: []string{"{file}"}, PathScopeFiles: []string{"**/*.go", "!**/.*/**"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
 			}}},
 			// Runs from PATH, not `go tool`: the module tool block never carried it, so

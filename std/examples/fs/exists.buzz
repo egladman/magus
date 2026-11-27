@@ -1,6 +1,8 @@
 import "std";
 import "fs";
 
-// exists raises when the path cannot be examined at all (an unreadable parent),
-// which is not the same answer as "no", so the fallback says no separately.
-if (fs\exists("go.mod") catch false) { std\print("Go module"); }
+fun main(args: [str]) > void {
+    // exists raises when the path cannot be examined at all, such as an unreadable parent.
+    // That is not the same answer as "no", so the fallback says no separately.
+    if (fs\exists("go.mod") catch false) { std\print("Go module"); }
+}
