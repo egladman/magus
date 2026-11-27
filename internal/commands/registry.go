@@ -2933,6 +2933,7 @@ var buzzCommand = command.Command{
 		{Name: "coverprofile", Kind: command.String, Doc: "Write one LCOV coverprofile across the files under `-t` (requires `-t`)"},
 		{Name: "profile", Kind: command.Bool, Default: false, Doc: "Print where compile and import time went, after the script runs"},
 		{Name: "record", Kind: command.Bool, Default: false, Doc: "Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (`magus query output <ref>` reopens it)"},
+		{Name: "restart", Kind: command.Bool, Default: false, Doc: "With --record, discard the replay log of this run and start from the top, instead of resuming a run that died"},
 		{Name: "embedded", Kind: command.Bool, Default: false, Doc: "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine"},
 		{Name: "autoload", Kind: command.Bool, Default: true, Doc: "Execute the magusfile when the REPL starts; --no-autoload starts without it"},
 		{Name: "C", Kind: command.String, Doc: "Change to `dir` before anything else, as go -C does, so script paths and imports resolve from it; lsp takes it only as the first flag"},

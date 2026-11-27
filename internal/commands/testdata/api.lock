@@ -189,8 +189,10 @@ flag buzz/no-check
 flag buzz/no-embedded
 flag buzz/no-profile
 flag buzz/no-record
+flag buzz/no-restart
 flag buzz/profile
 flag buzz/record
+flag buzz/restart
 flag buzz/t
 flag buzz/test
 flag clean/cache

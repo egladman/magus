@@ -105,6 +105,10 @@ type Session struct {
 	// recovered VM panic or a host-callable error raised as a throw is reported.
 	// nil in normal runs; gated exactly like stepHook. See SetFaultHook.
 	faultHook func(vmpackage.FaultKind)
+	// interceptor sees every call this session's VMs make. within puts it on
+	// the ctx each VM is built from, which is how fiber and callback VMs inherit
+	// it. nil in normal runs. See WithCallInterceptor.
+	interceptor vmpackage.CallInterceptor
 	// searchPaths is the ordered list of path templates searched when an import
 	// statement names a module not yet bound in the session. Each template holds
 	// `?` (replaced with the import path) and may reference environment variables
@@ -489,12 +493,12 @@ func newSession(ctx context.Context, opts ...Option) *Session {
 	// for the duration of Exec(), making Frames()/CallDepth()/step hooks reflect
 	// the fiber's stack. They are registered under their keyword names (which the
 	// user cannot shadow since resume/resolve are lexer keywords).
-	env.Define("resume", vmpackage.DirectValue("resume", s.builtinResume))
-	env.Define("resolve", vmpackage.DirectValue("resolve", s.builtinResolve))
+	env.Define("resume", vmpackage.BuiltinValue("resume", s.builtinResume))
+	env.Define("resolve", vmpackage.BuiltinValue("resolve", s.builtinResolve))
 	// The test-block registrar (see compiler.compileTestDecl). Bound under a name
 	// no user identifier can spell, so `test "x" {…}` blocks register their bodies
 	// without any reserved-name collision.
-	env.Define(testRegistrarName, vmpackage.DirectValue(testRegistrarName, s.registerTest))
+	env.Define(testRegistrarName, vmpackage.BuiltinValue(testRegistrarName, s.registerTest))
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -717,6 +721,12 @@ func WithImportFile(fn func(importPath string) (path string, ok bool)) Option {
 	return func(s *Session) { s.importFile = fn }
 }
 
+// WithCallInterceptor routes each call Buzz makes into a Go native through
+// obs, in fibers, callbacks and import sessions too. A nil obs runs them directly.
+func WithCallInterceptor(obs vmpackage.CallInterceptor) Option {
+	return func(s *Session) { s.interceptor = obs }
+}
+
 // NewSession creates a Buzz execution context. Inject globals with SetGlobal
 // and register target callbacks via Targets. Close releases the context.
 //
@@ -766,6 +776,7 @@ func (s *Session) NewChild() *Session {
 	c.sourceReader = s.sourceReader
 	c.parseCache = s.parseCache
 	c.scanner = s.scanner
+	c.interceptor = s.interceptor
 	c.fileImportsDisabled = s.fileImportsDisabled
 	c.ffiDisabled = s.ffiDisabled
 	if c.ffiDisabled {
@@ -925,6 +936,9 @@ type sessionKey struct{}
 
 // within returns ctx carrying s, so host callables find their caller.
 func (s *Session) within(ctx context.Context) context.Context {
+	if s.interceptor != nil {
+		ctx = vmpackage.WithCallInterceptor(ctx, s.interceptor)
+	}
 	return context.WithValue(ctx, sessionKey{}, s)
 }
 
@@ -3057,6 +3071,7 @@ func (s *Session) loadIsolated(ctx context.Context, src, dir string) (*cachedImp
 	sub.parseCache = s.parseCache
 	sub.scanner = s.scanner
 	sub.compileObserver = s.compileObserver
+	sub.interceptor = s.interceptor
 	sub.bytecodeStore = s.bytecodeStore
 
 	// Inherit what the parent has already collected from its own flat imports.

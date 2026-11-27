@@ -167,6 +167,7 @@ var vocabulary = []concept{
 	{Flag: "record"},
 	{Flag: "ref"},
 	{Flag: "refresh"},
+	{Flag: "restart"},
 	{Flag: "result-digest"},
 	{Flag: "regenerate"},
 	{Flag: "regex"},

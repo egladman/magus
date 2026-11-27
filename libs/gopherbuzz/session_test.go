@@ -3852,3 +3852,147 @@ final g = make("there");
 	assert.Contains(t, s.Globals()["f"].String(), "hi")
 	assert.Contains(t, s.Globals()["g"].String(), "there")
 }
+
+// passThrough runs every call and notes its name and first string argument.
+type passThrough struct{ seen []string }
+
+func (p *passThrough) InterceptCall(ctx context.Context, name string, args []vm.Value, call vm.Callable) (vm.Value, error) {
+	note := name
+	if len(args) > 0 && args[0].IsString() {
+		note += " " + args[0].AsString()
+	}
+	p.seen = append(p.seen, note)
+	return call(ctx, args)
+}
+
+// everyNativeSource reaches probe.ping through each path a call can take.
+const everyNativeSource = `
+import "probe";
+fun work() > str *> int { return probe\ping("fiber"); }
+final viaCall = probe\ping;
+final a = viaCall("call");
+final b = probe\ping("invoke");
+final c = resolve &work();
+final d = probe\each(fun () > str => probe\ping("callback"));
+final e = ["builtin"].map(fun (_: int, x: str) > str => probe\ping(x));
+`
+
+// newNativeSession registers a native module whose natives append to the returned
+// log as they run. probe.each runs a Buzz callback through CallValue, and
+// probe.wait suspends the fiber it runs in.
+func newNativeSession(t *testing.T, opts ...Option) (*Session, vm.Value, *[]string) {
+	t.Helper()
+	ran := &[]string{}
+	s := NewSession(t.Context(), append([]Option{WithEmbedded()}, opts...)...)
+	t.Cleanup(func() { _ = s.Close() })
+	mod := vm.NewMap()
+	mod.MapSet("ping", vm.DirectValue("probe.ping", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		*ran = append(*ran, "ping "+args[0].AsString())
+		return args[0], nil
+	}))
+	mod.MapSet("each", vm.DirectValue("probe.each", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		*ran = append(*ran, "each")
+		return s.CallValue(ctx, args[0], nil)
+	}))
+	mod.MapSet("wait", vm.DirectValue("probe.wait", func(context.Context, []vm.Value) (vm.Value, error) {
+		*ran = append(*ran, "wait")
+		return vm.Null, vm.Suspend(vm.StringValue("parked"))
+	}))
+	mod.MapSet("fail", vm.DirectValue("probe.fail", func(context.Context, []vm.Value) (vm.Value, error) {
+		*ran = append(*ran, "fail")
+		return vm.Null, errors.New("native refused")
+	}))
+	s.SetNativeModule("probe", mod)
+	return s, mod, ran
+}
+
+func TestCallInterceptorSeesEveryNative(t *testing.T) {
+	obs := &passThrough{}
+	s, mod, _ := newNativeSession(t, WithCallInterceptor(obs))
+	require.NoError(t, s.Exec(t.Context(), everyNativeSource))
+
+	ping, ok := mod.MapGet("ping")
+	require.True(t, ok)
+	_, err := s.CallValue(t.Context(), ping, []vm.Value{vm.StringValue("go call")})
+	require.NoError(t, err)
+	_, err = s.CallMethod(t.Context(), mod, "ping", []vm.Value{vm.StringValue("go invoke")})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{
+		"probe.ping call",
+		"probe.ping invoke",
+		"probe.ping fiber",
+		"probe.each",
+		"probe.ping callback",
+		"probe.ping builtin",
+		"probe.ping go call",
+		"probe.ping go invoke",
+	}, obs.seen, "OpCall, OpInvoke, a fiber, a native's callback, a builtin's callback, VM.Call and VM.Invoke")
+}
+
+func TestCallInterceptorSkipsBuiltins(t *testing.T) {
+	obs := &passThrough{}
+	s, _, _ := newNativeSession(t, WithCallInterceptor(obs))
+	require.NoError(t, s.Exec(t.Context(), `
+final xs = mut [1, 2];
+xs.append(3);
+final push = xs.append;
+push(4);
+final n = xs.len();
+final word = "seam";
+final up = word.upper();
+final size = word.len();
+final parts = "a,b".split(",");
+final m = {"k": 1};
+final keys = m.keys();
+fun one() > int *> int { return 1; }
+final r = resolve &one();
+`))
+	assert.Empty(t, obs.seen, "a list, string or map method and resolve belong to the language, not a native")
+}
+
+func TestCallInterceptorKeepsSuspend(t *testing.T) {
+	obs := &passThrough{}
+	s, _, ran := newNativeSession(t, WithCallInterceptor(obs))
+	require.NoError(t, s.Exec(t.Context(), `
+import "probe";
+var reached = "no";
+var caught = "no";
+fun body() > void *> str !> any {
+    reached = probe\wait();
+    try { probe\fail(); } catch (e) { caught = "{e}"; }
+}
+`))
+	fiber, err := s.Eval(t.Context(), `return &body()`)
+	require.NoError(t, err)
+
+	parked, err := s.ResumeFiber(t.Context(), fiber)
+	require.NoError(t, err)
+	assert.Equal(t, "parked", parked.AsString(), "the suspend value still reaches the driver")
+	assert.Equal(t, "no", s.Globals()["reached"].AsString(), "the body is parked")
+
+	_, err = s.ResumeFiber(t.Context(), fiber)
+	require.NoError(t, err)
+	assert.Equal(t, "parked", s.Globals()["reached"].AsString(), "the call evaluates to the suspend value")
+	assert.Contains(t, s.Globals()["caught"].AsString(), "native refused", "a native's error still throws into Buzz")
+	assert.Equal(t, []string{"wait", "fail"}, *ran, "the suspending native runs once")
+	assert.Equal(t, []string{"probe.wait", "probe.fail"}, obs.seen)
+}
+
+// The natives run the same calls, in the same order, with no observer as under
+// one that only passes each call through.
+func TestSessionWithoutObserverIsUnchanged(t *testing.T) {
+	plain, _, plainRan := newNativeSession(t)
+	require.NoError(t, plain.Exec(t.Context(), everyNativeSource))
+	nilObs, _, nilRan := newNativeSession(t, WithCallInterceptor(nil))
+	require.NoError(t, nilObs.Exec(t.Context(), everyNativeSource))
+	observed, _, observedRan := newNativeSession(t, WithCallInterceptor(&passThrough{}))
+	require.NoError(t, observed.Exec(t.Context(), everyNativeSource))
+
+	assert.Equal(t, []string{"ping call", "ping invoke", "ping fiber", "each", "ping callback", "ping builtin"}, *plainRan)
+	assert.Equal(t, *plainRan, *nilRan, "a nil observer is no observer")
+	assert.Equal(t, *plainRan, *observedRan)
+	for _, name := range []string{"a", "b", "c", "d", "e"} {
+		assert.Equal(t, plain.Globals()[name].String(), observed.Globals()[name].String(), "global %s", name)
+	}
+}

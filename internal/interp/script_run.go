@@ -51,6 +51,8 @@ type ScriptOptions struct {
 	Test bool
 	// Record keeps what the run printed in the output store.
 	Record bool
+	// Restart discards the run's replay log and starts from the top. It needs Record.
+	Restart bool
 }
 
 // ScriptRecord is what a recorded run printed and how it ended.
@@ -61,6 +63,9 @@ type ScriptRecord struct {
 	Out        []byte
 	Started    time.Time
 	Err        error
+	// DiedIn names the call a failed run was inside, "#<seq> <name>", empty when
+	// none explains the failure.
+	DiedIn string
 }
 
 // ScriptRunner runs Buzz scripts for `magus buzz`: it resolves the source, opens the
@@ -79,6 +84,25 @@ type ScriptRunner struct {
 	Phase func(name string) func()
 	// Record keeps a recorded run; nil with Options.Record set is a refusal.
 	Record func(ctx context.Context, root string, rec ScriptRecord) error
+	// Replay opens a recorded run's replay log, discarding the record first when
+	// restart is set. nil with Options.Record set is a refusal. A test run never asks.
+	Replay func(ctx context.Context, root string, rec ScriptRecord, restart bool) (*ReplayLog, error)
+}
+
+// ReplayLog is an open replay log as the runner holds it. The wiring builds it
+// so this package imports no record store.
+type ReplayLog struct {
+	// Interceptor is installed on the run's session.
+	Interceptor vm.CallInterceptor
+	// Attach hands the log the run's session, once it exists. nil when the log has no use for it.
+	Attach func(sess *buzz.Session)
+	// DiedIn names the call a run that failed with err was inside, "#<seq> <name>", or
+	// returns "" when none explains the failure.
+	DiedIn func(err error) string
+	// Close ends the record. ended is false when the run's context cut it short, which a
+	// rerun resumes. A refusal comes back as an error that errors.As reads as a
+	// replayRefusal.
+	Close func(ended bool, runErr error) error
 }
 
 func (r *ScriptRunner) phase(name string) func() {
@@ -121,6 +145,9 @@ func (r *ScriptRunner) Test(ctx context.Context, root string, o ScriptOptions, p
 // runScript runs one script in a session of its own, recording the run under
 // -t or --record. A non-nil cov collects the script's line coverage.
 func (r *ScriptRunner) runScript(ctx context.Context, root string, o ScriptOptions, src coverage.BuzzScript, cov *buzz.LineCoverage) (retErr error) {
+	if o.Restart && !o.Record {
+		return errors.New("magus buzz: --restart discards a replay log, and only a --record run keeps one: add --record")
+	}
 	ctx, err := r.RunContext(ctx, root)
 	if err != nil {
 		return err
@@ -128,21 +155,62 @@ func (r *ScriptRunner) runScript(ctx context.Context, root string, o ScriptOptio
 	ctx, services := service.WithScope(ctx)
 	defer releaseScriptServices(ctx, services)
 	scriptOut, records := scriptWriters(ctx)
+	var calls *ReplayLog
 	// A test run is always recorded: a passing one is evidence a script check can cite.
 	if o.Record || o.Test {
 		var recorded bytes.Buffer
 		scriptOut, records = io.MultiWriter(scriptOut, &recorded), io.MultiWriter(records, &recorded)
 		started := time.Now()
 		defer func() {
-			if err := r.record(ctx, root, ScriptRecord{Name: src.Name, Code: src.Code, Args: src.Args, Test: o.Test,
-				Out: recorded.Bytes(), Started: started, Err: retErr}); err != nil {
+			rec := ScriptRecord{Name: src.Name, Code: src.Code, Args: src.Args, Test: o.Test,
+				Out: recorded.Bytes(), Started: started, Err: retErr}
+			if calls != nil && retErr != nil {
+				rec.DiedIn = calls.DiedIn(retErr)
+			}
+			if err := r.record(ctx, root, rec); err != nil {
 				retErr = errors.Join(retErr, err)
 			}
 		}()
+		// A test run is already evidence and replays nothing, so it keeps no calls.
+		if !o.Test {
+			var err error
+			if calls, err = r.openReplay(ctx, root, src, o.Restart); err != nil {
+				return err
+			}
+			defer func() { retErr = closeReplayLog(calls, ctx.Err() == nil, retErr) }()
+		}
 	}
 	in, _ := pipe.RecordsIn(ctx)
 	ctx = report.WithStage(ctx, report.Stage{In: in, Out: records, Prose: scriptOut})
-	return r.execScript(ctx, o, src, scriptOut, cov)
+	return r.execScript(ctx, o, src, scriptOut, cov, calls)
+}
+
+func (r *ScriptRunner) openReplay(ctx context.Context, root string, src coverage.BuzzScript, restart bool) (*ReplayLog, error) {
+	if r.Replay == nil {
+		return nil, errors.New("magus buzz: --record: no replay store is wired here")
+	}
+	return r.Replay(ctx, root, ScriptRecord{Name: src.Name, Code: src.Code, Args: src.Args}, restart)
+}
+
+// replayRefusal is an error that says a rerun was refused. Naming it here keeps this
+// package from importing the replay log's own.
+type replayRefusal interface {
+	error
+	Refused()
+}
+
+// closeReplayLog ends the log and folds its error into runErr. A refusal replaces runErr,
+// since the script's own error is only its echo.
+func closeReplayLog(calls *ReplayLog, ended bool, runErr error) error {
+	err := calls.Close(ended, runErr)
+	var refusal replayRefusal
+	switch {
+	case err == nil:
+		return runErr
+	case errors.As(err, &refusal):
+		return err
+	}
+	return errors.Join(runErr, err)
 }
 
 func (r *ScriptRunner) record(ctx context.Context, root string, rec ScriptRecord) error {
@@ -169,9 +237,12 @@ func scriptWriters(ctx context.Context) (prose, records io.Writer) {
 	return os.Stdout, os.Stdout
 }
 
-func (r *ScriptRunner) execScript(ctx context.Context, o ScriptOptions, src coverage.BuzzScript, scriptOut io.Writer, cov *buzz.LineCoverage) error {
-	sess := newScriptSession(ctx, o, src.Name)
+func (r *ScriptRunner) execScript(ctx context.Context, o ScriptOptions, src coverage.BuzzScript, scriptOut io.Writer, cov *buzz.LineCoverage, calls *ReplayLog) error {
+	sess := newScriptSession(ctx, o, src.Name, calls)
 	defer func() { _ = sess.Close() }() // the script has run; a close error has no reader
+	if calls != nil && calls.Attach != nil {
+		calls.Attach(sess)
+	}
 	addProfileObserver(ctx, sess)
 	lateErr, err := r.installHost(ctx, sess, src.Code, scriptOut)
 	if err != nil {
@@ -193,8 +264,11 @@ func (r *ScriptRunner) execScript(ctx context.Context, o ScriptOptions, src cove
 
 // newScriptSession opens a strict session, upstream Buzz parity. --embedded
 // opts into the magusfile engine's relaxations, so a magus module can run here.
-func newScriptSession(ctx context.Context, o ScriptOptions, name string) *buzz.Session {
+func newScriptSession(ctx context.Context, o ScriptOptions, name string, calls *ReplayLog) *buzz.Session {
 	var opts []buzz.Option
+	if calls != nil {
+		opts = append(opts, buzz.WithCallInterceptor(calls.Interceptor))
+	}
 	// -e is the one-off exception: a snippet takes the embedded rules, as python -c
 	// needs no main. Files and stdin stay strict.
 	if o.Embedded || o.Inline {
