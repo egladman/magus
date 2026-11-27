@@ -438,7 +438,7 @@ export final finishedBranchLimit = 10;
 // It is copied out like Spawn. finishedBranches are the branches core read
 // as unmerged; branchesUnknown names the ones it could not read.
 export object ForkCounts {
-    finishedBranches: [str] = [],
+    finishedBranches: [FinishedBranch] = [],
     branchesUnknown: str = "",
     integrateRecord: str = "",
     commitsSinceTest: int = 0,
@@ -463,7 +463,11 @@ export fun decideFork(fork: mandate\Fork, counts: ForkCounts, limit: int) > Guar
     if (counts.branchesUnknown != "") {
         unread = "; unread, so not counted: {counts.branchesUnknown}";
     }
-    final facts = "{finished.len()} finished branch(es) off the base: {finished.join(", ")}{unread}; "
+    final named = mut [<str>];
+    foreach (b in finished) {
+        named.append("{b.branch} (job {b.job}, {b.commits} commit(s))");
+    }
+    final facts = "{finished.len()} finished branch(es) off the base: {named.join(", ")}{unread}; "
         + "{describeTest(counts)}. The limit is {limit} branches, a starting guess: "
         + "change finishedBranchLimit in hack/policy/spawn.buzz if it is wrong.";
     if (!fork.known) {
@@ -474,12 +478,12 @@ export fun decideFork(fork: mandate\Fork, counts: ForkCounts, limit: int) > Guar
 }
 
 // othersBranches is branches less job id's own: a re-fork reworks that branch
-// rather than adding one. forkFacts names each `<branch> (job <job>, <n> commit(s))`.
-fun othersBranches(branches: [str], id: str) > [str] {
+// rather than adding one.
+fun othersBranches(branches: [FinishedBranch], id: str) > [FinishedBranch] {
     if (id == "") {
         return branches;
     }
-    return branches.filter(fun (index: int, b: str) > bool => b.indexOf("(job {id},") == null);
+    return branches.filter(fun (index: int, b: FinishedBranch) > bool => b.job != id);
 }
 
 fun describeTest(counts: ForkCounts) > str {
@@ -540,9 +544,9 @@ fun forkRecord(programs: [helpers\Program], at: int, line: str, read: fun (path:
 }
 
 fun waiting(branches: int, commits: int = 3) > ForkCounts {
-    final names = mut [<str>];
+    final names = mut [<FinishedBranch>];
     for (var i = 0; i < branches; i = i + 1) {
-        names.append("done-{i} (job done-{i}, 1 commit(s))");
+        names.append(FinishedBranch{ branch = "done-{i}", job = "done-{i}", commits = 1 });
     }
     return ForkCounts{
         finishedBranches = names,
@@ -563,6 +567,8 @@ fun noFile(path: str) > str {
 test "a re-fork does not count its own finished branch toward the limit" {
     std\assert(decideFork(mandate\Fork{ id = "done-3" }, counts: waiting(10), limit: 10).decision == magus\GuardDecision.defer, message: "its own branch");
     std\assert(decideFork(mandate\Fork{ id = "done-1" }, counts: waiting(11), limit: 10).decision == magus\GuardDecision.deny, message: "ten others still refuse");
+    final renamed = ForkCounts{ finishedBranches = waiting(9).finishedBranches + [FinishedBranch{ branch = "feature", job = "done-9", commits = 1 }] };
+    std\assert(decideFork(mandate\Fork{ id = "done-9" }, counts: renamed, limit: 10).decision == magus\GuardDecision.defer, message: "matched by job id, not branch name");
 }
 
 test "a top-level fork at the limit is refused, printing both counts, the last test and the file" {
