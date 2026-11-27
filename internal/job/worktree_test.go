@@ -93,24 +93,27 @@ func (s *FollowCheckpointSuite) TestForkingAtItsOwnBaseKeepsItsCommits() {
 	s.Equal(mine, s.head())
 }
 
-// The re-fork's own commits read as a match at exec, not a divergence.
-func (s *FollowCheckpointSuite) TestAReforkOverTheJobsOwnCommitsStartsAtTheHead() {
-	s.repo.Git("-C", s.row.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "the job's own")
-	mine := s.head()
+// The re-fork keeps its checkpoint, so wait reads the job's own commits as
+// its work, and exec reads them as a match, not a divergence.
+func (s *FollowCheckpointSuite) TestAReforkOverTheJobsOwnCommitsKeepsItsCheckpoint() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.row.Worktree.Root, "mine.txt"), []byte("work\n"), 0o644))
+	s.repo.Git("-C", s.row.Worktree.Root, "add", "mine.txt")
+	s.repo.Git("-C", s.row.Worktree.Root, "commit", "-q", "-m", "the job's own")
 	wt, err := s.fork(s.start)
 	s.Require().NoError(err)
-	rows, err := s.store.List(s.T().Context())
-	s.Require().NoError(err)
 
-	checkpoint, note := StartCheckpoint(s.T().Context(), rows, "w1", s.start, wt)
+	checkpoint := StartCheckpoint(s.T().Context(), s.start, wt)
 
-	s.Equal(mine, checkpoint)
-	s.Contains(note, fmt.Sprintf("stands at %.12s, not the checkpoint %.12s", mine, s.start))
+	s.Equal(s.start, checkpoint)
 	_, err = s.store.Update(s.T().Context(), "w1", func(u *job.Job) { u.Checkpoint = checkpoint })
 	s.Require().NoError(err)
 	taken, err := NewStore(Location{StateBase: s.loc.StateBase, CacheDir: s.loc.CacheDir, Root: wt.Root}).Exec(s.T().Context(), "w1")
 	s.Require().NoError(err)
 	s.Equal(job.BaseMatch, taken.BaseVerdict)
+	seen, err := CheckpointObserver(wt.Root, nil)(s.T().Context(), taken)
+	s.Require().NoError(err)
+	s.True(seen.ChangedKnown)
+	s.Contains(seen.Changed, "mine.txt")
 }
 
 func (s *FollowCheckpointSuite) TestAForkNamingNoCheckpointStartsAtTheHead() {
@@ -118,24 +121,8 @@ func (s *FollowCheckpointSuite) TestAForkNamingNoCheckpointStartsAtTheHead() {
 	mine := s.head()
 	wt, err := s.fork("")
 	s.Require().NoError(err)
-	rows, err := s.store.List(s.T().Context())
-	s.Require().NoError(err)
 
-	checkpoint, note := StartCheckpoint(s.T().Context(), rows, "w1", "", wt)
-
-	s.Equal(mine, checkpoint)
-	s.Empty(note)
-}
-
-func (s *FollowCheckpointSuite) TestACheckoutAnotherJobHoldsKeepsTheDeclaredCheckpoint() {
-	s.repo.Git("-C", s.row.Worktree.Root, "commit", "-q", "--allow-empty", "-m", "the job's own")
-	rows, err := s.store.List(s.T().Context())
-	s.Require().NoError(err)
-
-	checkpoint, note := StartCheckpoint(s.T().Context(), rows, "w2", s.start, *s.row.Worktree)
-
-	s.Equal(s.start, checkpoint)
-	s.Empty(note)
+	s.Equal(mine, StartCheckpoint(s.T().Context(), "", wt))
 }
 
 func (s *FollowCheckpointSuite) TestAnUnknownCheckpointIsRefused() {
@@ -1363,6 +1350,21 @@ func (s *BinaryPinSuite) TestACheckoutNoLiveRowWorksInIsUnheld() {
 	s.Require().NoError(err)
 	why, unheld := s.refusalHeld(s.bin)
 	s.True(unheld)
+	s.Equal("no live job row records it as its checkout's binary", why)
+}
+
+// An exited read-only row that recorded its binary with no digest holds
+// nothing: its holder is done there and pinned no bytes.
+func (s *BinaryPinSuite) TestAnExitedRowWithNoDigestLeavesItsCheckoutUnheld() {
+	_, err := s.store.Update(s.T().Context(), "w1", func(cur *job.Job) {
+		cur.State, cur.ReadOnly, cur.CheckoutRoot = job.StateExited, true, s.row.Worktree.Root
+		cur.Worktree.Binary, cur.Worktree.BinaryDigest = s.bin, ""
+	})
+	s.Require().NoError(err)
+
+	why, unheld := s.refusalHeld(s.bin)
+
+	s.True(unheld, why)
 	s.Equal("no live job row records it as its checkout's binary", why)
 }
 

@@ -7,10 +7,32 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
 )
+
+// The narrowing the hint prints parses back to the paths it names, a claim
+// among them.
+func TestNarrowAdviceParsesBackToItsPaths(t *testing.T) {
+	t.Parallel()
+
+	unused := []string{"run.go#Run,Stop", "a.md", "b.md"}
+	advice := narrowAdvice("A", unused)
+
+	assert.Contains(t, advice, "`magus job apply A --release-write-path run.go#Run,Stop --release-write-path a.md --release-write-path b.md`")
+	var values []string
+	fields := strings.Fields(advice)
+	for i, f := range fields {
+		if f == "--release-write-path" && i+1 < len(fields) {
+			values = append(values, strings.Trim(fields[i+1], "`,"))
+		}
+	}
+	got, err := ClaimPaths("release-write-path", values)
+	require.NoError(t, err)
+	assert.Equal(t, unused, got)
+}
 
 func TestUnusedWritePaths(t *testing.T) {
 	t.Parallel()

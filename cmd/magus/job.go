@@ -855,15 +855,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 				return job.FailedProvision(ctx, store, worktree, made, fmt.Errorf("pinning %s: %w", worktree.Binary, err))
 			}
 		}
-		rows, err := store.List(ctx)
-		if err != nil {
-			return err
-		}
 		// The job starts from what its checkout holds, not from the forker's tree.
-		start, note := job.StartCheckpoint(ctx, rows, row.ID, row.Checkpoint, worktree)
-		if note != "" {
-			slog.InfoContext(ctx, note, attr.Notice("note"))
-		}
+		start := job.StartCheckpoint(ctx, row.Checkpoint, worktree)
 		amend = func(u *jobtypes.Job) {
 			// The validated merge expanded the declared checkpoint already.
 			if start != row.Checkpoint {
@@ -1360,7 +1353,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	// Exit owns the portable evidence snapshot for every declared gate. Keeping the
 	// CLI as a decoder/renderer avoids a second lifecycle that silently files only
 	// the historical primary check.
-	stored, err := job.Exit(ctx, store, pos[0], &result, storedAttempts(root))
+	stored, err := job.Exit(ctx, store.InWorkspace(jobWorkspace(ctx, root)), pos[0], &result, storedAttempts(root))
 	if err != nil {
 		return exit.Usagef("magus job exit: %s", err)
 	}
@@ -2082,7 +2075,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	}
 	report := job.ApplyReport{DryRun: globalCfg.DryRun}
 	for _, a := range applied {
-		report.Jobs = append(report.Jobs, job.ApplyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, ClaimNotes: claims[a.Next.ID]})
+		report.Jobs = append(report.Jobs, job.ApplyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, ClaimNotes: claims[a.Next.ID], SetAside: a.SetAside()})
 	}
 	return emitFormatted(opts, report)
 }

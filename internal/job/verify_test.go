@@ -551,6 +551,20 @@ func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 	assert.Contains(t, v.Violations[0], "declares no check and no postcondition")
 }
 
+// A read-only row with no check is graded by the result its holder filed. The
+// wait that collects it passes it and carries its risks.
+func TestVerifyPassesAReadOnlyRowItsHolderGraded(t *testing.T) {
+	t.Parallel()
+
+	row := job.Job{ID: "survey", ReadOnly: true, State: job.StateExited}
+	rep := job.Result{Job: "survey", UnresolvedRisks: []string{"the cache layer was not read"}}
+
+	v := VerifyGates(row, rep, job.CapturedRun{}, nil, nil, Observed{})
+
+	assert.True(t, v.Verified, "%v", v.Violations)
+	assert.Equal(t, rep.UnresolvedRisks, v.UnresolvedRisks)
+}
+
 // The binary's spelling is a way of running one target, so it may not decide whether the
 // evidence binds; nor may a check's args when the run recorded none.
 func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
@@ -1347,6 +1361,32 @@ func (s *narrowedRunSuite) TestRunOverThePostconditionsArgsMissingAChangedFileIs
 
 	s.False(v.Verified, "the postcondition's own list is no answer for a file the row went on to change")
 	s.Contains(strings.Join(v.Violations, "\n"), "internal/ledger/report_test.go")
+}
+
+// A changed file another verified run read is no file the check left out.
+func (s *narrowedRunSuite) TestAFileAnotherVerifiedRunReadPassesTheCheck() {
+	check := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"spells/x.buzz"}}
+	row := s.row("internal/job/landings.go", "spells/x.buzz")
+	row.Check, row.Validation = fixtureCheck(check), CheckCommand(check)
+	seen := s.seen("spells/x.buzz", "internal/job/landings.go")
+	seen.TestSelection = goCheckSelection
+	seen.namedFiles = map[string]bool{"spells/x.buzz": true}
+	row.Paths.Write = []string{"internal/job/landings.go", "spells/x.buzz"}
+	rep := passingResult()
+	rep.ChangedPaths = []string{"spells/x.buzz", "internal/job/landings.go"}
+	rep.Validation.Command = row.Validation
+	rep.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}
+	ran :=job.CapturedRun{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"spells/x.buzz"}}
+	lint := job.CapturedRun{Found: true, Target: "lint", Project: ".", Ref: "out2", ExtraArgs: []string{"internal/job/landings.go", "spells/x.buzz"}}
+
+	v := VerifyGates(row, rep, ran, []job.PostconditionAttempt{{PostconditionID: "lint", Attempt: lint}}, nil, seen)
+
+	s.True(v.Verified, "%v", v.Violations)
+	s.Contains(strings.Join(v.Notes, "\n"), `without the changed files internal/job/landings.go, which postcondition(s) lint read`)
+
+	lint.ExtraArgs = []string{"spells/x.buzz"}
+	v = VerifyGates(row, rep, ran, []job.PostconditionAttempt{{PostconditionID: "lint", Attempt: lint}}, nil, seen)
+	s.False(v.Verified, "a changed file no run read still fails")
 }
 
 func (s *narrowedRunSuite) TestUnknownChangeIsRefused() {
