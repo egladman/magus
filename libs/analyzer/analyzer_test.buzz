@@ -2,12 +2,12 @@ import "assert";
 import "fs";
 import "vcs";
 import "magus/lint";
-import "libs/analyzer/analyzer" as analyzer;
-import "libs/analyzer/adapter" as adapter;
-import "libs/analyzer/finding" as finding;
-import "libs/analyzer/golangci" as golangci;
-import "libs/analyzer/policy" as policy;
-import "libs/analyzer/runner" as runner;
+import "analyzer" as analyzer;
+import "adapter" as adapter;
+import "finding" as finding;
+import "golangci" as golangci;
+import "policy" as policy;
+import "runner" as runner;
 
 fun none(input: analyzer\Input) > [finding\Finding] {
     return [<finding\Finding>];

@@ -1,0 +1,90 @@
+// library-imports-stay-inside refuses a library's Buzz file importing a module by a
+// workspace or relative path. A published library resolves bare names only, so a
+// sibling is imported by its bare name and the rest is a std or magus/ module.
+//
+// Tier 1, mechanical: the fix names the sibling bare.
+namespace libraryimports;
+
+import "assert";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final IMPORT = std\pattern(`^\s*import\s+"([^"]+)"`);
+final MODULE_ROOTS = ["encoding", "magus"];
+
+export fun reads() > [str] {
+    return ["libs/*/*.buzz"];
+}
+
+// escape is the line and path of the first import in src that leaves its library, or empty.
+export fun escape(src: str) > [str] {
+    var n = 0;
+    foreach (line in src.split("\n")) {
+        n = n + 1;
+        final m = IMPORT.match(line);
+        if (m == null) {
+            continue;
+        }
+        final path = m![1];
+        final slash = path.indexOf("/");
+        if (slash == null) {
+            continue;
+        }
+        if (path.startsWith(".") or MODULE_ROOTS.indexOf(path.sub(0, len: slash!)) == null) {
+            return ["{n}", path];
+        }
+    }
+    return [<str>];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        if (f.value.endsWith("/magusfile.buzz")) {
+            continue;
+        }
+        final readResult = support\read(f);
+        if (readResult.error != null) {
+            throw readResult.error!.message;
+        }
+        final hit = escape(readResult.value!);
+        if (hit.len() == 2) {
+            found.append(Finding{ path = f.value, line = std\parseInt(hit[0]) ?? 0,
+                message = "{f.value} imports \"{hit[1]}\", which a published library cannot resolve",
+                hint = "Import a sibling by its bare name, as import \"finding\" as finding;." });
+        }
+    }
+    return found;
+}
+
+test "a library importing siblings bare and modules by their path passes" {
+    final got = check(support\fixture({
+        "libs/x/a.buzz": "import \"fs\";\nimport \"encoding/json\";\nimport \"magus/lint\";\nimport \"b\" as b;\n",
+    }).value!);
+    assert\equal(got.len(), want: 0, message: "clean");
+}
+
+test "a library importing a sibling by workspace path is reported at its line" {
+    final got = check(support\fixture({
+        "libs/x/a.buzz": "import \"fs\";\nimport \"libs/x/b\" as b;\n",
+    }).value!);
+    assert\equal(support\messages(got), want: [
+        "libs/x/a.buzz imports \"libs/x/b\", which a published library cannot resolve",
+    ], message: "findings");
+    assert\equal(got[0].line, want: 2, message: "the line of the import");
+}
+
+test "a relative import is reported" {
+    final got = check(support\fixture({
+        "libs/x/a.buzz": "import \"../../magusfiles/build/index\" as index;\n",
+    }).value!);
+    assert\equal(got.len(), want: 1, message: "relative path");
+}
+
+test "a magusfile is not a library file" {
+    final got = check(support\fixture({
+        "libs/x/magusfile.buzz": "import \"./x\" as x;\n",
+    }).value!);
+    assert\equal(got.len(), want: 0, message: "skipped");
+}

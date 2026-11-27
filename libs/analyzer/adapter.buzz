@@ -3,8 +3,8 @@
 // rule has that shape left.
 namespace adapter;
 
-import "libs/analyzer/analyzer" as analyzer;
-import "libs/analyzer/finding" as finding;
+import "analyzer" as analyzer;
+import "finding" as finding;
 import "magus/lint";
 
 // rule is the analyzer the magus/lint rule name declares in source. It reaches the
