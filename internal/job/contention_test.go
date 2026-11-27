@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
@@ -29,7 +30,7 @@ func TestNarrowAdviceParsesBackToItsPaths(t *testing.T) {
 		}
 	}
 	got, err := ClaimPaths("release-write-path", values)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, unused, got)
 }
 
