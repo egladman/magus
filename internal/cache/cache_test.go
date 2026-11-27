@@ -1882,3 +1882,46 @@ func TestUnchangedFailureHintNamesTheFailedNeedRef(t *testing.T) {
 	assert.Contains(t, out, "magus query output outeeeeeeeeeeee")
 	assert.Contains(t, out, "lint-go")
 }
+
+// A run whose moved inputs are all declared updates is current at the tree it left, so it
+// records that tree's key. Any other moved input, a failure, or no move records none.
+func TestARunRecordsItsSettledKeyOnlyWhenEveryMovedInputIsADeclaredUpdate(t *testing.T) {
+	recorded := func(t *testing.T, step Step, fn func(context.Context) error) (OutputDescriptor, *Cache) {
+		t.Helper()
+		_, _, c := newMutableCache(t)
+		res, _ := c.Run(withResolver(t.Context()), step, fn)
+		require.NotEmpty(t, res.Ref)
+		d, err := c.outputs.DescriptorByRef(res.Ref)
+		require.NoError(t, err)
+		return d, c
+	}
+
+	root := t.TempDir()
+	writeMain(t, root, "package main // recieve")
+	step := makeStep(root)
+	step.Updates = types.MustParseGlobs("test/pkg/*.go")
+	d, c := recorded(t, step, rewriteMain(t, root, "package main // receive"))
+	left, err := c.hashStep(t.Context(), &step)
+	require.NoError(t, err)
+	assert.False(t, d.Failed)
+	assert.Equal(t, left, d.SettledKey, "the key the rewritten tree hashes to")
+	assert.NotEqual(t, d.Key, d.SettledKey)
+
+	d, _ = recorded(t, step, func(context.Context) error { return nil })
+	assert.Empty(t, d.SettledKey, "a run that moved nothing is current at its own key")
+
+	writeMain(t, root, "package main // recieve")
+	d, _ = recorded(t, step, func(context.Context) error {
+		writeMain(t, root, "package main // receive")
+		return assert.AnError
+	})
+	assert.True(t, d.Failed)
+	assert.Empty(t, d.SettledKey, "a failed run settles nothing")
+
+	owned := makeStep(root)
+	owned.OwnedOutputs = types.MustParseGlobs("test/pkg/*.go")
+	writeMain(t, root, "package main // recieve")
+	d, _ = recorded(t, owned, rewriteMain(t, root, "package main // receive"))
+	assert.False(t, d.Failed, "a moved declared output passes MGS4007")
+	assert.Empty(t, d.SettledKey, "an input that moved and is no declared update leaves no settled key")
+}

@@ -68,6 +68,12 @@ files.
    message names the op's edits field instead of `ctx.writesFiles`: `declare them in
    the edits of op go::go-fmt, or run the op from a target that declares them with
    ctx.writesFiles([...], editsExistingSource: true)`.
+7. A run that edits in place is judged at the key it left. A passing run whose moved
+   inputs are all its declared updates records `settled_key` on its output descriptor:
+   the key its inputs hash to after the run. `job wait` counts the run current when its
+   check mints either key on the job's tree, so a `:rw` run that rewrote a file it read
+   is not stale. A hand edit after the run moves the key past both. Nothing is cached
+   under the settled key, so a rerun still executes.
 
 | Item                                                                        | State   |
 | --------------------------------------------------------------------------- | ------- |
@@ -79,6 +85,7 @@ files.
 | The guard reads `edits` in place of "this op writes, set unknown"           | planned |
 | The doctor compares an op's `edits` with a composing target's `writesFiles` | planned |
 | `order.go` orders readers after a bare op's edits                           | planned |
+| `settled_key` recorded by the cache and accepted by `job wait`              | done    |
 
 ### What a run does now
 
@@ -86,7 +93,8 @@ files.
   and records nothing.
 - `magus run go-fmt:rw` rewrites the file and passes. `movedInputs` refuses the entry,
   because an input moved during the run. The next `go-fmt:rw` changes nothing and
-  records, and the one after that replays.
+  records, and the one after that replays. The run that rewrote records its settled
+  key, so a job that commits the rewrite counts that run as current.
 - After a recorded passing check, a new edit to the file changes the key, because the
   file is in Sources. The check misses and fails on the new drift.
 - An op that rewrites a file outside its `edits`, or declares none, still fails MGS4007.

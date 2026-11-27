@@ -71,6 +71,7 @@ type OutputDescriptor struct {
 
 	Key          string `json:"key,omitempty"`         // full cache key hash (64 hex)
 	KeyVersion   string `json:"key_version,omitempty"` // key hashing-scheme version that produced Key
+	SettledKey   string `json:"settled_key,omitempty"` // key after a run rewrote only its declared updates
 	Attempt      string `json:"attempt,omitempty"`     // execution-unique id
 	MagusVersion string `json:"magus_version,omitempty"`
 

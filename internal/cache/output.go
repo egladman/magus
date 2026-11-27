@@ -100,6 +100,10 @@ type OutputDescriptor struct {
 	// fields below carry the identity it derives from.
 	Key          string `json:"key,omitempty"`         // full cache key hash (64 hex)
 	KeyVersion   string `json:"key_version,omitempty"` // hashStep KeyVersion that produced Key
+	// SettledKey is the key the inputs hash to after the run, set only when a passing run
+	// rewrote nothing but its declared updates. The run is current at the tree it left.
+	// Nothing is cached under it.
+	SettledKey   string `json:"settled_key,omitempty"`
 	Attempt      string `json:"attempt,omitempty"`     // execution-unique id; the file stem
 	MagusVersion string `json:"magus_version,omitempty"`
 	// PersistedNs orders attempts that share a TimestampMs: unix nanoseconds at Persist,
