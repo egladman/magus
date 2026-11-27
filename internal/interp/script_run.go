@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -205,9 +206,20 @@ func newScriptSession(ctx context.Context, o ScriptOptions, name string) *buzz.S
 	// not the directory the script lives in, and `import "lib/hook"` has to
 	// follow the script. Stdin and -e have no file to stand beside.
 	if dir := scriptImportDir(name); dir != "" {
-		sess.SetIncludeDirs(append([]string{dir}, sess.IncludeDirs()...))
+		sess.SetIncludeDirs(append(scriptIncludeDirs(dir), sess.IncludeDirs()...))
 	}
 	return sess
+}
+
+// scriptIncludeDirs adds the workspace root after the script's directory, for
+// project-relative imports. The root is FindRoot's: docs/ has its own magusfile
+// and is not the workspace.
+func scriptIncludeDirs(dir string) []string {
+	root, err := workspace.FindRoot(dir)
+	if err != nil || root == dir {
+		return []string{dir}
+	}
+	return []string{dir, root}
 }
 
 func enableScriptCoverage(sess *buzz.Session, name string, cov *buzz.LineCoverage) {
