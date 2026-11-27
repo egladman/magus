@@ -54,6 +54,11 @@ records, so each passes the scope test; none is built:
 
 The principle pages name debts of their own:
 
+- **A verify step the loop does not shorten** ([Optimize the loop that verifies](principles/optimize-the-loop-that-verifies.md)):
+  `emit` ([ADR 0061](../decisions/0061-a-code-template-is-a-value-with-typed-holes.md))
+  is a decided exception. It makes text an agent was already going to write arrive
+  correct and shows its diff before the write, and it does not shorten a verify step.
+  The page's bad example stands: magus ships no template and gains no generate verb.
 - **A scale target** ([Built for the largest monorepos](principles/built-for-the-largest-monorepos.md)):
   nothing commits the size of repository magus is measured against, or the
   latency a lookup must hold at that size, so "fast at scale" is asserted, not
