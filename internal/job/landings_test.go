@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/codec"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/testkit"
@@ -842,6 +844,36 @@ func (s *unmergedSuite) TestSettleRecordsAStatedReason() {
 
 	s.Require().NoError(err)
 	s.Equal("dropped", got[0].LeftUnmerged)
+}
+
+// An agent's reason alone must not forget work only this repository or a
+// remote branch holds: a person disposes the request first.
+func (s *unmergedSuite) TestSettingAsideUnmergedWorkWaitsOnAPerson() {
+	head := strings.TrimSpace(s.repo.Git("rev-parse", s.branch("w")))
+	s.repo.Git("update-ref", "refs/remotes/origin/w", head)
+	plant(s.T(), s.store, job.Job{ID: "w", State: job.StateNoReturn, Registered: 1, Head: head})
+
+	_, err := s.settle(job.Declaration{ID: "w", LeftUnmerged: "dropped"})
+
+	s.Require().ErrorContains(err, "reads pushed, so setting it aside forgets it")
+	s.Empty(storedRows(s.T(), s.store)["w"].LeftUnmerged, "the row stays listed")
+	requests := slices.DeleteFunc(attentionRows(s.T(), s.repo.Root()), func(r sessions.AttentionRequest) bool { return r.Source != asideSource })
+	s.Require().Len(requests, 1)
+
+	dispose(s.T(), s.repo.Root(), requests[0].ID)
+	got, err := s.settle(job.Declaration{ID: "w", LeftUnmerged: "dropped"})
+
+	s.Require().NoError(err)
+	s.Equal("dropped", got[0].LeftUnmerged)
+}
+
+func (s *unmergedSuite) TestSettingAsideWorkABaseHoldsWritesAtOnce() {
+	plant(s.T(), s.store, job.Job{ID: "w", State: job.StateNoReturn, Registered: 1, Head: s.repo.Head()})
+
+	got, err := s.settle(job.Declaration{ID: "w", LeftUnmerged: "landed by hand"})
+
+	s.Require().NoError(err)
+	s.Equal("landed by hand", got[0].LeftUnmerged)
 }
 
 func (s *unmergedSuite) TestSettleRefusesAnItemTheResultDoesNotDefer() {

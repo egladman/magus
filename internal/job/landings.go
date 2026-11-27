@@ -817,7 +817,8 @@ func integratedByPass(rows []job.Job, id string) bool {
 }
 
 // Settle writes each record's answers onto the row it names, ended or not.
-// Only an orchestrator settles: a holder cannot wave off what it deferred.
+// No holder settles: a holder cannot wave off what it deferred. A reason
+// that forgets work no base holds waits on a person ([Store.confirmSetAside]).
 // Every record is checked before any is written.
 func (s *Store) Settle(ctx context.Context, records []job.Declaration, dryRun bool) ([]job.Job, error) {
 	if lease := s.Actor().Lease; lease != "" {
@@ -832,6 +833,9 @@ func (s *Store) Settle(ctx context.Context, records []job.Declaration, dryRun bo
 		return nil, err
 	}
 	if err := checkSettles(rows, job.NewAttempts(all), records); err != nil {
+		return nil, err
+	}
+	if err := s.confirmSetAside(ctx, rows, records); err != nil {
 		return nil, err
 	}
 	settled := make([]job.Job, 0, len(records))

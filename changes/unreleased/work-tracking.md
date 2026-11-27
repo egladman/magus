@@ -8,3 +8,7 @@
   holder wrote in retires only once a placement read found its head on a base, it
   landed, or a person set it aside. Rows stored without a head stay until a person
   disposes of them.
+- **Breaking: `left_unmerged` on work no base holds waits on a person.** `magus job
+  apply` files an attention request and refuses while the row's head reads local, pushed
+  or unread. Once a person disposes the request, the same apply writes the reason. A row
+  whose head a base holds takes the reason at once.
