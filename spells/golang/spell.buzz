@@ -296,7 +296,9 @@ fun goFuzz(target: Target) > Command {
 // this tree alone. The write charm is therefore update, not rw.
 fun goModTidy(target: Target) > Command {
     final args = ["mod", "tidy", "--diff"];
-    return Command{bin = "go", args = args, edits = ["go.mod", "go.sum"], charms = {
+    // Tidy takes no file operand. An empty file map makes the runner drop one.
+    return Command{bin = "go", args = args, edits = ["go.mod", "go.sum"],
+        pathScope = ["\{file\}"], pathScopeFiles = ["**/*", "!**/*"], charms = {
         "update": drop(args, anchor: "--diff"),
     }};
 }
