@@ -527,7 +527,9 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, postcondition
 		}
 	}
 
-	if row.Check.IsZero() && len(row.Postconditions) == 0 && !row.Integrating() {
+	// A read-only row's filed result is its grade (see [gradedByHolder]), so
+	// the wait that collects it reads the risks it names and passes it.
+	if row.Check.IsZero() && len(row.Postconditions) == 0 && !row.Integrating() && !gradedByHolder(row) {
 		v.Violations = append(v.Violations, fmt.Sprintf("job %s declares no check and no postcondition, so nothing magus can grade says it is done."+
 			" Declare one in the job record's check or postconditions; a fact no target checks can be shown by a script run with"+
 			" `magus buzz --record`, whose printed ref is evidence anyone can reopen", row.ID))
