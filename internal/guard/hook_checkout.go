@@ -109,7 +109,7 @@ func BinaryCheckout(bin string) string {
 }
 
 // UnpinnedBinary says why the session may not hand a call to own, "" when it may.
-// It may when a live row records own and its hash, or no live row works in own's
+// It may when a live row records own's hash, or no live row works in own's
 // checkout and [unheldRefusal] takes own. own's report of itself never takes a held
 // checkout: a worker that rebuilt it would pick its judge. It skips the sweep.
 func (e HookEnv) UnpinnedBinary(ctx context.Context, own, session string) string {
@@ -128,7 +128,7 @@ func (e HookEnv) UnpinnedBinary(ctx context.Context, own, session string) string
 	if refused == "" {
 		return ""
 	}
-	return why + ", and " + refused
+	return fmt.Sprintf("%s, and %s", why, refused)
 }
 
 // unheldRefusal says why own may not judge in place of self, "" when it may. No

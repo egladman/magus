@@ -1038,11 +1038,9 @@ func withPlaces(facts job.ForkFacts, placed []workPlace) job.ForkFacts {
 		switch {
 		case p.Place == placeUnread:
 			unread = append(unread, fmt.Sprintf("job %s: %s; %s", p.Job, p.Why, p.Fix))
-		case p.Place == placeProposed:
-			facts.FinishedBranches = append(facts.FinishedBranches, finishedBranch(p))
-		case p.Waiting():
-			facts.FinishedBranches = append(facts.FinishedBranches, finishedBranch(p))
-			if p.Branch != "" {
+		case p.Place == placeProposed || p.Waiting():
+			facts.FinishedBranches = append(facts.FinishedBranches, job.FinishedBranch{Branch: p.Name(), Job: p.Job, Commits: p.Commits, Place: string(p.Place), Change: p.Change})
+			if p.Place != placeProposed && p.Branch != "" {
 				branches = append(branches, p.Branch)
 			}
 		}
@@ -1061,10 +1059,6 @@ func withPlaces(facts job.ForkFacts, placed []workPlace) job.ForkFacts {
 		facts.IntegrateRecord = string(record)
 	}
 	return facts
-}
-
-func finishedBranch(p workPlace) job.FinishedBranch {
-	return job.FinishedBranch{Branch: p.Name(), Job: p.Job, Commits: p.Commits, Place: string(p.Place), Change: p.Change}
 }
 
 // finishedPlaces names each place branches wait in: a row off every change by
