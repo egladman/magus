@@ -1,0 +1,85 @@
+// core-reads-no-analyzer-policy: analyzer policy lives beside its project, in the
+// analyzers.yaml each project owns, and is read only by the analyzer that judges
+// that project. The root module is the magus binary, so a Go file there that names
+// analyzers.yaml is reading or writing policy it must not hold. A nested module is
+// its own project and is out of scope.
+namespace corepolicy;
+
+import "assert";
+import "fs";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final POLICY = "analyzers.yaml";
+
+// reads: every Go file; nested modules are filtered out in check.
+export fun reads() > [str] {
+    return ["**/*.go"];
+}
+
+// nested reports whether f sits under a directory with its own go.mod below the
+// root. The root's go.mod is not counted, so the root module's files stay in scope.
+fun nested(f: Path) > bool !> any {
+    var dir = fs\dirname(f.value);
+    while (dir != "." and dir != "/" and dir != "") {
+        if (fs\exists(f.base + "/" + dir + "/go.mod")) {
+            return true;
+        }
+        dir = fs\dirname(dir);
+    }
+    return false;
+}
+
+// check fails each root-module Go file that names analyzers.yaml, comments included.
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        if (nested(f)) {
+            continue;
+        }
+        final got = support\read(f);
+        if (got.error != null) {
+            found.append(support\missing(f.value));
+            continue;
+        }
+        foreach (hit in judge(f.value, src: got.value!)) {
+            found.append(hit);
+        }
+    }
+    return found;
+}
+
+// judge reports each line of src that names analyzers.yaml.
+export fun judge(path: str, src: str) > [Finding] {
+    final found = mut [<Finding>];
+    foreach (i, line in src.split("\n")) {
+        if (line.indexOf(POLICY) != null) {
+            found.append(Finding{ path = path, line = i + 1,
+                message = "this root-module Go file names analyzers.yaml: the magus binary reads no analyzer policy",
+                hint = "Move the read into the analyzer that owns the project, or pass the value in as an argument." });
+        }
+    }
+    return found;
+}
+
+test "a root-module line that names analyzers.yaml is reported at its line" {
+    final got = judge("internal/x.go", src: "package x\n// reads analyzers.yaml here\n");
+    assert\equal(got.len(), want: 1, message: "one hit");
+    assert\equal(got[0].line, want: 2, message: "its line");
+    assert\equal(got[0].path, want: "internal/x.go", message: "its path");
+}
+
+test "a file that does not name analyzers.yaml passes" {
+    assert\equal(judge("internal/x.go", src: "package x\n").len(), want: 0, message: "clean");
+}
+
+test "a nested module is out of scope and the root's go.mod is not counted" {
+    final files = support\fixture({"go.mod": "module m\n", "internal/a.go": "x\n",
+        "libs/x/go.mod": "module x\n", "libs/x/a.go": "x\n"});
+    assert\equal(files.error == null, want: true, message: "fixture");
+    final paths = files.value!;
+    assert\equal(paths[0].value, want: "go.mod", message: "sorted first");
+    assert\equal(nested(paths[1]), want: false, message: "internal is root-module");
+    assert\equal(paths[2].value, want: "libs/x/a.go", message: "sorted third");
+    assert\equal(nested(paths[2]), want: true, message: "libs/x is its own module");
+}
