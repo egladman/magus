@@ -35,11 +35,12 @@ fun main(args: [str]) > void !> any {
 
 In the docs:
 
+- [2026-11-26: an artifact may be a module library](../decisions/0002-remote-spells-are-imported-by-registry-path.md#2026-11-26-an-artifact-may-be-a-module-library)
 - [D. Implement spec assembly in Go only, with no Buzz module](../decisions/0018-magus-assembles-oci-images.md#d-implement-spec-assembly-in-go-only-with-no-buzz-module)
-- [A separate Go module for the queue](../decisions/0024-magus-queue-is-a-plugin-binary.md#a-separate-go-module-for-the-queue)
 - [Release one module](../guides/releasing.md#release-one-module)
 - [The assert module](../guides/testing.md#the-assert-module)
 - [Magusfile Module Reference](../reference/buzz/index.md#magusfile-module-reference)
+- [Module libraries](../reference/remote-spells.md#module-libraries)
 
 In the code (`magus refs <name>` lists every site):
 
