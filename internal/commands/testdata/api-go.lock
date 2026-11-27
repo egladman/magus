@@ -1903,7 +1903,17 @@ github.com/egladman/magus/types.EditedFile type struct
 github.com/egladman/magus/types.EditedFile.DigestAfter field string "json:\"digest_after\"  yaml:\"digest_after\""
 github.com/egladman/magus/types.EditedFile.DigestBefore field string "json:\"digest_before\" yaml:\"digest_before\""
 github.com/egladman/magus/types.EditedFile.Path field string "json:\"path\"          yaml:\"path\""
+github.com/egladman/magus/types.EmitBadBraces const DiagnosticCode = "MGS1065"
+github.com/egladman/magus/types.EmitBadBytes const DiagnosticCode = "MGS1067"
+github.com/egladman/magus/types.EmitBadHeader const DiagnosticCode = "MGS1064"
+github.com/egladman/magus/types.EmitBadHole const DiagnosticCode = "MGS1066"
 github.com/egladman/magus/types.EmitDiagnostic func(ctx context.Context, ev DiagnosticEvent)
+github.com/egladman/magus/types.EmitFile type struct
+github.com/egladman/magus/types.EmitFile.Path field string
+github.com/egladman/magus/types.EmitFile.Template field Template
+github.com/egladman/magus/types.EmitMissingValue const DiagnosticCode = "MGS1068"
+github.com/egladman/magus/types.EmitNullValue const DiagnosticCode = "MGS1070"
+github.com/egladman/magus/types.EmitUnusedValue const DiagnosticCode = "MGS1069"
 github.com/egladman/magus/types.Empty type struct
 github.com/egladman/magus/types.EncodeLeaseCheck func(c LeaseCheck) (github.com/egladman/magus/libs/safetyscissors/job.Check, error)
 github.com/egladman/magus/types.EngineNotLinked const DiagnosticCode = "MGS1104"
@@ -2459,6 +2469,11 @@ github.com/egladman/magus/types.Inspector.Workspace imethod func(ctx context.Con
 github.com/egladman/magus/types.InstallRunner type func(ctx context.Context, dir string, spell string, target string, choice github.com/egladman/magus/spells.InstallChoice, run func(context.Context) error) error
 github.com/egladman/magus/types.InstallRunnerFromContext func(ctx context.Context) InstallRunner
 github.com/egladman/magus/types.InternalFailure const DiagnosticCode = "MGS9027"
+github.com/egladman/magus/types.Interpolation type struct
+github.com/egladman/magus/types.Interpolation.Conversion field string
+github.com/egladman/magus/types.Interpolation.Expression field string
+github.com/egladman/magus/types.Interpolation.FormatSpec field string
+github.com/egladman/magus/types.Interpolation.Value field any
 github.com/egladman/magus/types.InvalidGlobs func(globs []Glob) []string
 github.com/egladman/magus/types.InvocationAncestorsFromContext func(ctx context.Context) []string
 github.com/egladman/magus/types.InvocationRoot func(ctx context.Context) string
@@ -3372,6 +3387,7 @@ github.com/egladman/magus/types.OutputDescriptor.Platform field string "json:\"p
 github.com/egladman/magus/types.OutputDescriptor.Project field string "json:\"project\""
 github.com/egladman/magus/types.OutputDescriptor.Ref field string "json:\"ref\""
 github.com/egladman/magus/types.OutputDescriptor.Revision field string "json:\"revision,omitempty\""
+github.com/egladman/magus/types.OutputDescriptor.SettledKey field string "json:\"settled_key,omitempty\""
 github.com/egladman/magus/types.OutputDescriptor.Spell field string "json:\"spell,omitempty\""
 github.com/egladman/magus/types.OutputDescriptor.Target field string "json:\"target,omitempty\""
 github.com/egladman/magus/types.OutputDescriptor.TimestampMs field int64 "json:\"timestamp_ms\""
@@ -4295,6 +4311,10 @@ github.com/egladman/magus/types.TargetSpellUse type struct
 github.com/egladman/magus/types.TargetSpellUse.Ops field []string "json:\"ops,omitempty\" yaml:\"ops,omitempty\""
 github.com/egladman/magus/types.TargetSpellUse.Spell field string "json:\"spell\"         yaml:\"spell\""
 github.com/egladman/magus/types.TargetStatus type string
+github.com/egladman/magus/types.Template type struct
+github.com/egladman/magus/types.Template.Interpolations field []Interpolation
+github.com/egladman/magus/types.Template.Source field string
+github.com/egladman/magus/types.Template.Strings field []string
 github.com/egladman/magus/types.TermBold const TermStyle = "1"
 github.com/egladman/magus/types.TermBrightGreen const TermStyle = "1;32"
 github.com/egladman/magus/types.TermDim const TermStyle = "2"
