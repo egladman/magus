@@ -20,7 +20,9 @@ fun dprint(target: Target) > Command {
     final args = ["check", "--config-discovery=ignore-descendants"];
     // Edits name the Markdown this spell claims. A dprint.json that formats other
     // files needs a magusfile target that declares them.
-    return Command{bin = "dprint", args = args, edits = ["**/*.md", "**/*.MD", "**/*.markdown", "**/*.mdx"], charms = {
+    final noFile = ["**/*", "!**/*"];
+    return Command{bin = "dprint", args = args, edits = ["**/*.md", "**/*.MD", "**/*.markdown", "**/*.mdx"],
+        pathScope = ["\{file\}"], pathScopeFiles = noFile, charms = {
         "rw": set(args, anchor: "check", val: "fmt"),
     }};
 }

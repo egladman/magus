@@ -20,6 +20,12 @@ test "dprint ignores descendant configs under the default" {
         message: "default argv");
 }
 
+test "dprint drops a forwarded file" {
+    final cmd = dprintCommand();
+    std\assert(cmd.pathScope.len() > 0, message: "a declared scope is what makes the runner drop a forwarded file");
+    std\assert(cmd.pathScopeFiles.indexOf("!**/*") != null, message: "dprint takes its files from dprint.json");
+}
+
 test "dprint ignores descendant configs under rw" {
     final cmd = dprintCommand();
     final rw = cmd.charms["rw"]!;
