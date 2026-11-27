@@ -1353,6 +1353,21 @@ func (s *BinaryPinSuite) TestACheckoutNoLiveRowWorksInIsUnheld() {
 	s.Equal("no live job row records it as its checkout's binary", why)
 }
 
+// An exited read-only row that recorded its binary with no digest holds
+// nothing: its holder is done there and pinned no bytes.
+func (s *BinaryPinSuite) TestAnExitedRowWithNoDigestLeavesItsCheckoutUnheld() {
+	_, err := s.store.Update(s.T().Context(), "w1", func(cur *job.Job) {
+		cur.State, cur.ReadOnly, cur.CheckoutRoot = job.StateExited, true, s.row.Worktree.Root
+		cur.Worktree.Binary, cur.Worktree.BinaryDigest = s.bin, ""
+	})
+	s.Require().NoError(err)
+
+	why, unheld := s.refusalHeld(s.bin)
+
+	s.True(unheld, why)
+	s.Equal("no live job row records it as its checkout's binary", why)
+}
+
 func (s *BinaryPinSuite) TestPinRecordsTheBinaryAndItsHash() {
 	pinned, err := s.store.PinBinary(s.T().Context(), "w1")
 	s.Require().NoError(err)

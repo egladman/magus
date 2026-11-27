@@ -1020,15 +1020,18 @@ func (s *Store) PinRefusal(ctx context.Context, bin string) (why string, unheld 
 		return "", false, err
 	}
 	live := slices.DeleteFunc(rows, func(r job.Job) bool { return !r.State.Live() })
+	// Only a holder still editing works in a checkout. A row its holder left
+	// with no digest pinned no bytes, so it holds nothing once it exits.
 	pinning := slices.DeleteFunc(slices.Clone(live), func(r job.Job) bool {
-		return !r.Worktree.Standing() || !samePath(r.Worktree.Binary, bin)
+		return !r.Worktree.Standing() || !samePath(r.Worktree.Binary, bin) || !Editing(r) && r.Worktree.BinaryDigest == ""
 	})
 	if len(pinning) == 0 {
 		checkout := filepath.Dir(bin)
-		if i := slices.IndexFunc(live, func(r job.Job) bool {
+		editing := slices.DeleteFunc(slices.Clone(live), func(r job.Job) bool { return !Editing(r) })
+		if i := slices.IndexFunc(editing, func(r job.Job) bool {
 			return samePath(r.CheckoutRoot, checkout) || (r.Worktree.Standing() && samePath(r.Worktree.Root, checkout))
 		}); i >= 0 {
-			return fmt.Sprintf("job %s works in its checkout, and no live job row records it as its checkout's binary", live[i].ID), false, nil
+			return fmt.Sprintf("job %s works in its checkout, and no live job row records it as its checkout's binary", editing[i].ID), false, nil
 		}
 		return "no live job row records it as its checkout's binary", true, nil
 	}
