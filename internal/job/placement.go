@@ -76,10 +76,9 @@ func (p workPlace) Name() string {
 	return p.Head[:min(len(p.Head), 12)]
 }
 
-// placements places each over row of root's own tree ([ownTree]) a holder
-// wrote in, in store order. It leaves out a row a live integration names, one
-// that landed, and one a person set aside. The error is a read that answers
-// for no row; note names what the change list or the remote left unread.
+// placements places the over rows of root's own tree ([ownTree]) that a
+// holder wrote in and nothing else carries. The error answers for no row;
+// note names what the change list or the remote left unread.
 func placements(ctx context.Context, root string, rows []job.Job, open OpenChanges, now time.Time) ([]workPlace, string, error) {
 	work := placedRows(rows, root)
 	if len(work) == 0 {
