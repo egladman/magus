@@ -488,6 +488,9 @@ export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (pat
         if (p.name != "magus" or ops.len() < 2 or ops[0] != "job" or ops[1] != "fork") {
             continue;
         }
+        if (helpers\hasFlag(p.args, long: "--schema") or helpers\hasFlag(p.args, long: "--dry-run")) {
+            continue;
+        }
         final fork = mandate\readFork(p, body: forkRecord(programs, at: index, line: line, read: read));
         if (fork.known and (fork.integrates.len() > 0 or fork.parent != "")) {
             continue;
@@ -644,4 +647,25 @@ test "a line of five forks reads the facts once" {
     final v = decideForkLine([fork, fork, fork, fork, fork], line: line, read: noFile, facts: few, limit: 10);
     std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
     std\assert(calls.len() == 1, message: "facts ran {calls.len()} times");
+}
+
+test "--schema passes past the limit, since it writes no row" {
+    final over = fun () > ForkCounts {
+        return waiting(10);
+    };
+    final line = "./magus job fork --schema -o json";
+    final v = decideForkLine([forkProgram(["--schema", "-o", "json"])], line: line, read: noFile, facts: over, limit: 10);
+    std\assert(v.decision == magus\GuardDecision.defer, message: v.reason);
+}
+
+test "--dry-run passes past the limit, even for a plain record that would be refused" {
+    final over = fun () > ForkCounts {
+        return waiting(10);
+    };
+    final plain = "\{\"id\":\"next\"\}";
+    final line = "./magus job fork --stdin --dry-run <<'EOF'\n{plain}\nEOF";
+    final dry = forkProgram(["--stdin", "--dry-run"]);
+    std\assert(decideForkLine([dry], line: line, read: noFile, facts: over, limit: 10).decision == magus\GuardDecision.defer, message: "dry-run");
+    final live = forkProgram(["--stdin"]);
+    std\assert(decideForkLine([live], line: "./magus job fork --stdin <<'EOF'\n{plain}\nEOF", read: noFile, facts: over, limit: 10).decision == magus\GuardDecision.deny, message: "a live plain fork is still refused");
 }
