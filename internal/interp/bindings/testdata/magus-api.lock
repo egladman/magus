@@ -44,7 +44,6 @@ guard.shell
 guard.spawn
 guard.step
 guard.stop
-guard.swap
 guard.write
 harness
 harness.install
