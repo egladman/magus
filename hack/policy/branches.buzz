@@ -341,15 +341,24 @@ export fun fragmentSubject(path: str, text: str) > Subject {
     return Subject{ label = slug, words = subjectWords(slug + " " + headline) };
 }
 
-// commitSubjectTopic is a commit subject without its conventional type.
+// commitSubjectTopic is a commit subject without its conventional type. The imperative verb
+// that opens the description goes too: it says what was done, never what it was done to.
 export fun commitSubjectTopic(subject: str) > Subject {
-    final all = splitWords(subject);
-    final words = mut [<str>];
-    foreach (w in subjectWords(subject)) {
-        if (all.len() > 1 and w == all[0] and commitTypes.indexOf(w) != null) { continue; }
-        words.append(w);
+    var scope = "";
+    var rest = subject;
+    final colon = subject.indexOf(": ");
+    if (colon != null) {
+        final head = splitWords(subject.sub(0, len: colon!));
+        if (head.len() > 0 and commitTypes.indexOf(head[0]) != null) {
+            scope = head.sub(1).join(" ");
+            rest = subject.sub(colon! + 2);
+        }
     }
-    return Subject{ label = subject, words = words };
+    final described = splitWords(rest);
+    if (described.len() > 1) {
+        rest = described.sub(1).join(" ");
+    }
+    return Subject{ label = subject, words = subjectWords(scope + " " + rest) };
 }
 
 // withSubjects is topic with the subjects the branch adds.
