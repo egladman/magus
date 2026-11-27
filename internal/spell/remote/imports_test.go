@@ -114,7 +114,7 @@ func TestLoadImportsOverridesAModule(t *testing.T) {
 	assert.Equal(t, filepath.Join(lib, "widget.buzz"), file)
 
 	for name, cfg := range map[string]config.SpellsConfig{
-		"no entry for the path":          {Imports: map[string]config.SpellImport{"ghcr.io/team/libs/gadget": {Path: "libs/widget"}}},
+		"no entry for the path":           {Imports: map[string]config.SpellImport{"ghcr.io/team/libs/gadget": {Path: "libs/widget"}}},
 		"a module cannot replace a spell": {Imports: map[string]config.SpellImport{"magus/spell/widget": {Path: "libs/widget"}}},
 	} {
 		t.Run(name, func(t *testing.T) {
