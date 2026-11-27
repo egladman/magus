@@ -719,7 +719,7 @@ fun nodeAround(h: Hit, opts: Options) > [Section] {
     final order = mut [<str>];
     foreach (inbound, edges in {false: card!.@"out", true: card!.@"in"}) {
         foreach (e in edges) {
-            final name = if (inbound) "{e.relation} (in)" else e.relation;
+            final name = if (inbound) "{e.relation.value} (in)" else e.relation.value;
             if (byRelation[name] == null) {
                 byRelation[name] = mut [<Neighbor>];
                 order.append(name);
