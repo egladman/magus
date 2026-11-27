@@ -33,6 +33,7 @@ In the docs:
 
 In the code (`magus refs <name>` lists every site):
 
+- `magus\Spell` (Buzz host type)
 - `spells.Spell` (Go)
 - `types.Spell` (Go)
 

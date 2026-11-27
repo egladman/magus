@@ -27,6 +27,7 @@ magus\log.info(magus\insightMarkdown());
 
 In the docs:
 
+- [Generator ownership: declared outputs, drift verdict, formatter, prune](../decisions/0061-a-code-template-is-a-value-with-typed-holes.md#generator-ownership-declared-outputs-drift-verdict-formatter-prune)
 - [Ownership](../reference/api/historymetrics/v1alpha1/historymetrics.md#ownership)
 
 In the code (`magus refs <name>` lists every site):
