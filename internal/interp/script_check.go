@@ -57,6 +57,22 @@ func (r *ScriptRunner) Check(ctx context.Context, files []string, embedded bool)
 	return nil
 }
 
+// nearestMagusfileDir returns the closest directory at or above dir that holds a
+// magusfile.buzz, or "" when none does.
+func nearestMagusfileDir(dir string) string {
+	for dir != "" {
+		if _, err := os.Stat(filepath.Join(dir, "magusfile.buzz")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+	return ""
+}
+
 // CheckFile checks one path, returning its diagnostics with File set so each
 // one renders as <file>:L:C, the position shape an editor can jump to. A diagnostic
 // inside an imported file names that file, relative to the working directory when
@@ -76,7 +92,13 @@ func (r *ScriptRunner) CheckFile(ctx context.Context, path string, embedded bool
 	sess := buzz.NewSession(ctx, opts...)
 	defer func() { _ = sess.Close() }() // the diagnostics are already decided; a close error has no reader
 	if dir := scriptImportDir(resolved); dir != "" {
-		sess.SetIncludeDirs(append([]string{dir}, sess.IncludeDirs()...))
+		dirs := []string{dir}
+		// A project-relative import names a path from the workspace root, which
+		// neither the script's directory nor the cwd need be.
+		if root := nearestMagusfileDir(dir); root != "" && root != dir {
+			dirs = append(dirs, root)
+		}
+		sess.SetIncludeDirs(append(dirs, sess.IncludeDirs()...))
 	}
 	// Script output goes to STDERR on this path, unlike a run. A check prints no
 	// program output of its own, so anything reaching stdout here came from an
