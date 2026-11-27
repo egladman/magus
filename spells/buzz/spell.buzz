@@ -37,6 +37,23 @@ export fun mgs_getLanguage() > Language {
             },
             operators = ["==", "!=", "<=", ">=", "??", "->", "!>", "=>", "...", "+=", "-="],
             decisions = DecisionSyntax{keywords = ["if", "while", "for", "foreach", "and", "or", "catch"], operators = ["??", "->"]},
+            // Buzz writes a control byte in decimal, which no control placeholder spells.
+            encodings = [
+                Encoding{
+                    name = "ident",
+                    pattern = "^[A-Za-z_][A-Za-z0-9_]*$",
+                    reserved = ["and", "as", "break", "catch", "continue", "do", "else", "enum", "export",
+                                "false", "final", "for", "foreach", "from", "fun", "if", "import", "in", "is",
+                                "mut", "namespace", "null", "object", "or", "resolve", "resume", "return",
+                                "throw", "true", "try", "until", "var", "void", "while", "yield"],
+                },
+                Encoding{
+                    name = "string", open = "\"", close = "\"",
+                    escapes = [Escape{text = "\\", to = "\\\\"}, Escape{text = "\"", to = "\\\""},
+                               Escape{text = "\{", to = "\\\{"}, Escape{text = "\n", to = "\\n"},
+                               Escape{text = "\r", to = "\\r"}, Escape{text = "\t", to = "\\t"}],
+                },
+            ],
         },
     };
 }

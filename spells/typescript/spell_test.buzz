@@ -45,6 +45,19 @@ fun opsOf(claim: DiscoveredProject, target: str) > str {
     return (claim.targets[target] ?? [<str>]).join(",");
 }
 
+test "typescript declares ident and string encodings" {
+    final encodings = typescript\mgs_getLanguage().syntax!.encodings;
+    std\assert(encodings.map(fun (i: int, e: Encoding) > str => e.name).join(" ") == "ident string", message: "names");
+    std\assert(encodings[0].pattern == "^[\\p\{L}_$][\\p\{L}\\p\{Nd}_$]*$", message: "letters, digits, underscore and dollar");
+    std\assert(encodings[0].reserved.join(" ").indexOf(" function ") != null, message: "function refused");
+    std\assert(encodings[0].reserved.join(" ").indexOf(" let ") != null, message: "strict-mode words refused");
+    final string = encodings[1];
+    std\assert(string.open == "\"" and string.close == "\"", message: "double quotes");
+    final escapes = string.escapes.map(fun (i: int, e: Escape) > str => "{e.text}={e.to}").join(" ");
+    std\assert(escapes == "\\=\\\\ \"=\\\" \n=\\n \r=\\r \t=\\t", message: "backslash, quote, newline, return, tab");
+    std\assert(string.control == "\\x\{hex2}", message: "other controls as \\xNN");
+}
+
 test "a package wires the tools it declares and reports every script" {
     final claims = discover([
         marker("package.json", content: `\{"name": "web", "devDependencies": \{"eslint": "9", "prettier": "3", "vitest": "2", "typescript": "5"}, "scripts": \{"dev": "vite", "test": "vitest"}}`),

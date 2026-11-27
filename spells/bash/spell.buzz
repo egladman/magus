@@ -4,7 +4,26 @@ import "path";
 export fun mgs_getName() > str { return "bash"; }
 
 export fun mgs_getLanguage() > Language {
-    return Language{name = "shell", extensions = [".sh", ".bash"]};
+    return Language{
+        name = "shell",
+        extensions = [".sh", ".bash"],
+        syntax = Syntax{
+            encodings = [
+                Encoding{
+                    name = "ident",
+                    pattern = "^[A-Za-z_][A-Za-z0-9_]*$",
+                    reserved = ["case", "coproc", "do", "done", "elif", "else", "esac", "fi", "for",
+                                "function", "if", "in", "select", "then", "time", "until", "while"],
+                },
+                // Single quotes keep every byte literal; only the quote needs a way out.
+                Encoding{
+                    name = "string", open = "'", close = "'",
+                    escapes = [Escape{text = "'", to = "'\\''"}, Escape{text = "\n", to = "\n"},
+                               Escape{text = "\r", to = "\r"}, Escape{text = "\t", to = "\t"}],
+                },
+            ],
+        },
+    };
 }
 
 // magus indexes the scripts in process, one unit per file, so the index runs no tool. It
