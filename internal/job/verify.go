@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -626,6 +627,7 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, postcondition
 	}
 
 	statusByGate := map[string]job.VerificationStatus{}
+	var checked []string
 	for _, gate := range gates {
 		if cause, unrun := unrunByGate[gate.ID]; unrun && strings.TrimSpace(evidenceByGate[gate.ID]) == "" {
 			statusByGate[gate.ID] = job.VerificationStatus{ID: gate.ID, Violations: []string{
@@ -641,6 +643,9 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, postcondition
 			continue
 		}
 		check := checkOf[gate.ID]
+		if gate.Kind == job.PostconditionKindCheck {
+			checked = append(checked, gate.ID)
+		}
 		statusByGate[gate.ID] = verifyCheckedGate(row, gate, check, evidenceByGate[gate.ID], attemptByGate[gate.ID], seen)
 		if gate.Kind == job.PostconditionKindCheck && statusByGate[gate.ID].Verified && !seen.GreenGate.covers(check) &&
 			scopedRun(check, attemptByGate[gate.ID], seen.TestSelection) {
@@ -654,6 +659,7 @@ func VerifyGates(row job.Job, rep job.Result, att job.CapturedRun, postcondition
 				gate.ID, evidenceByGate[gate.ID], strings.Join(attemptByGate[gate.ID].ExtraArgs, " ")))
 		}
 	}
+	v.Notes = append(v.Notes, regradeReadElsewhere(row, gates, checked, checkOf, evidenceByGate, attemptByGate, seen, statusByGate)...)
 	// A dependency may appear after its consumer in the declaration. Re-evaluate until
 	// no status changes so a failed prerequisite propagates through the whole typed
 	// graph. Declaration.Validate rejects cycles, so this always reaches a fixed point.
@@ -1054,6 +1060,71 @@ func leftOut(c types.LeaseCheck, a job.CapturedRun, changed []string, named map[
 		return ""
 	}
 	return fmt.Sprintf(": it leaves out what this job changed: %s", strings.Join(unread, ", "))
+}
+
+// regradeReadElsewhere grades each failed check in graded again without the
+// changed files another verified file-scoped run read. Every changed file
+// needs one run that read it, not one per check. It returns a note per
+// regrade.
+func regradeReadElsewhere(row job.Job, gates []job.Postcondition, graded []string, checkOf map[string]types.LeaseCheck,
+	refs map[string]string, attempts map[string]job.CapturedRun, seen Observed, statusByGate map[string]job.VerificationStatus,
+) []string {
+	var notes []string
+	for again := true; again; {
+		again = false
+		for _, gate := range gates {
+			if !slices.Contains(graded, gate.ID) || statusByGate[gate.ID].Verified {
+				continue
+			}
+			check, attempt := checkOf[gate.ID], attempts[gate.ID]
+			if !fileScoped(check, seen.namedFiles, seen.TestSelection) || !onlyFiles(attempt.ExtraArgs) {
+				continue
+			}
+			var others []string
+			for _, id := range graded {
+				if id != gate.ID && statusByGate[id].Verified {
+					others = append(others, id)
+				}
+			}
+			narrowed, readBy := readElsewhere(seen.changedFiles, others, checkOf, attempts, seen)
+			_, own := readElsewhere(slices.Collect(maps.Keys(readBy)), []string{gate.ID}, checkOf, attempts, seen)
+			for f := range own {
+				delete(readBy, f)
+			}
+			if len(readBy) == 0 {
+				continue
+			}
+			regraded := seen
+			regraded.changedFiles = narrowed
+			if status := verifyCheckedGate(row, gate, check, refs[gate.ID], attempt, regraded); status.Verified {
+				statusByGate[gate.ID], again = status, true
+				readers := slices.Compact(slices.Sorted(maps.Values(readBy)))
+				notes = append(notes, fmt.Sprintf("postcondition %q was graded on output ref %q without the changed files %s, which postcondition(s) %s read",
+					gate.ID, refs[gate.ID], strings.Join(slices.Sorted(maps.Keys(readBy)), ", "), strings.Join(readers, ", ")))
+			}
+		}
+	}
+	return notes
+}
+
+// readElsewhere is changed without the files a file-scoped run of a check in
+// ids read, and which postcondition read each file it dropped.
+func readElsewhere(changed, ids []string, checkOf map[string]types.LeaseCheck, attempts map[string]job.CapturedRun, seen Observed) ([]string, map[string]string) {
+	readBy := map[string]string{}
+	kept := slices.DeleteFunc(slices.Clone(changed), func(f string) bool {
+		for _, id := range ids {
+			c, a := checkOf[id], attempts[id]
+			if !fileScoped(c, seen.namedFiles, seen.TestSelection) || !onlyFiles(a.ExtraArgs) {
+				continue
+			}
+			if slices.ContainsFunc(a.ExtraArgs, func(arg string) bool { return job.CoversPath(path.Join(c.Project, arg), f) }) {
+				readBy[f] = id
+				return true
+			}
+		}
+		return false
+	})
+	return kept, readBy
 }
 
 // runFailed is the violation of a failed run. A file-scoped check's findings in

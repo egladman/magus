@@ -1349,6 +1349,32 @@ func (s *narrowedRunSuite) TestRunOverThePostconditionsArgsMissingAChangedFileIs
 	s.Contains(strings.Join(v.Violations, "\n"), "internal/ledger/report_test.go")
 }
 
+// A changed file another verified run read is no file the check left out.
+func (s *narrowedRunSuite) TestAFileAnotherVerifiedRunReadPassesTheCheck() {
+	check := types.LeaseCheck{Target: "format", Project: ".", Args: []string{"spells/x.buzz"}}
+	row := s.row("internal/job/landings.go", "spells/x.buzz")
+	row.Check, row.Validation = fixtureCheck(check), CheckCommand(check)
+	seen := s.seen("spells/x.buzz", "internal/job/landings.go")
+	seen.TestSelection = goCheckSelection
+	seen.namedFiles = map[string]bool{"spells/x.buzz": true}
+	row.Paths.Write = []string{"internal/job/landings.go", "spells/x.buzz"}
+	rep := passingResult()
+	rep.ChangedPaths = []string{"spells/x.buzz", "internal/job/landings.go"}
+	rep.Validation.Command = row.Validation
+	rep.VerificationEvidence = []job.VerificationEvidence{{GateID: "lint", OutputRef: "out2"}}
+	ran :=job.CapturedRun{Found: true, Target: "format", Project: ".", ExtraArgs: []string{"spells/x.buzz"}}
+	lint := job.CapturedRun{Found: true, Target: "lint", Project: ".", Ref: "out2", ExtraArgs: []string{"internal/job/landings.go", "spells/x.buzz"}}
+
+	v := VerifyGates(row, rep, ran, []job.PostconditionAttempt{{PostconditionID: "lint", Attempt: lint}}, nil, seen)
+
+	s.True(v.Verified, "%v", v.Violations)
+	s.Contains(strings.Join(v.Notes, "\n"), `without the changed files internal/job/landings.go, which postcondition(s) lint read`)
+
+	lint.ExtraArgs = []string{"spells/x.buzz"}
+	v = VerifyGates(row, rep, ran, []job.PostconditionAttempt{{PostconditionID: "lint", Attempt: lint}}, nil, seen)
+	s.False(v.Verified, "a changed file no run read still fails")
+}
+
 func (s *narrowedRunSuite) TestUnknownChangeIsRefused() {
 	v := s.grade(s.row("cmd/magus/ledger.go", "internal/ledger/report.go"), Observed{ChangedKnown: true}, "cmd/magus/ledger.go")
 
