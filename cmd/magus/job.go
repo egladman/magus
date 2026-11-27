@@ -1353,7 +1353,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	// Exit owns the portable evidence snapshot for every declared gate. Keeping the
 	// CLI as a decoder/renderer avoids a second lifecycle that silently files only
 	// the historical primary check.
-	stored, err := job.Exit(ctx, store, pos[0], &result, storedAttempts(root))
+	stored, err := job.Exit(ctx, store.InWorkspace(jobWorkspace(ctx, root)), pos[0], &result, storedAttempts(root))
 	if err != nil {
 		return exit.Usagef("magus job exit: %s", err)
 	}
