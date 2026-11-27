@@ -1235,6 +1235,22 @@ func (gitVCS) CheckoutState(ctx context.Context, dir string) (types.CheckoutStat
 	for _, ref := range strings.Fields(refs) {
 		state.RemoteBranches = append(state.RemoteBranches, strings.TrimPrefix(ref, "refs/remotes/"))
 	}
+	// A branch pushed with -u records its upstream in config, which a fetch refspec
+	// that skips it never mirrors into refs/remotes.
+	upstreams, err := gitOutput(ctx, dir, gitOpts{}, "for-each-ref", "--format=%(upstream:remotename) %(upstream:remoteref)", "refs/heads")
+	if err != nil {
+		return types.CheckoutState{}, fmt.Errorf("git for-each-ref: %w", err)
+	}
+	for line := range strings.SplitSeq(upstreams, "\n") {
+		remote, ref, ok := strings.Cut(strings.TrimSpace(line), " ")
+		branch, isBranch := strings.CutPrefix(ref, "refs/heads/")
+		if !ok || remote == "" || !isBranch {
+			continue
+		}
+		if name := remote + "/" + branch; !slices.Contains(state.RemoteBranches, name) {
+			state.RemoteBranches = append(state.RemoteBranches, name)
+		}
+	}
 	return state, nil
 }
 
