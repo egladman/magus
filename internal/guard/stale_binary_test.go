@@ -927,9 +927,9 @@ func TestRecoveryLine(t *testing.T) {
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from /repo", "lease-a", true},
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from /repo && go build ./cmd/magus", "lease-a", false},
 		{"/repo/magus buzz hack/dev/other.buzz", "lease-a", false},
-		{"./magus buzz hack/dev/bootstrap-checkout.buzz -- --here", "lease-a", true},
-		{"./magus buzz hack/dev/bootstrap-checkout.buzz -- --checkout /w/a", "lease-a", true},
-		{"./magus buzz hack/dev/bootstrap-checkout.buzz -- --here && git push", "lease-a", false},
+		{"./magus buzz hack/dev/bootstrap-checkout.buzz", "lease-a", true},
+		{"./magus buzz hack/dev/bootstrap-checkout.buzz -- -C /w/a", "lease-a", true},
+		{"./magus buzz hack/dev/bootstrap-checkout.buzz && git push", "lease-a", false},
 		{"/repo/magus buzz hack/dev/bootstrap-worktree.buzz -- --job x --from /repo", "", true},
 	} {
 		assert.Equal(t, tc.want, recoveryLine(tc.line, DialectBash, tc.lease, tc.lease == "", at), "%s (lease %q)", tc.line, tc.lease)
@@ -1186,7 +1186,7 @@ func (s *NoBinaryRemedySuite) SetupTest() {
 }
 
 func (s *NoBinaryRemedySuite) TestItNamesTheBootstrapThenTheCheckoutHook() {
-	ready := "./magus buzz " + testCheckoutHook + " -- --here --verify-ready"
+	ready := "./magus buzz " + testCheckoutHook
 	bootstrap := config.SourceCommand(s.root, "", "", true)
 	fix := binaryRemedy(true, s.root, "", true)
 	s.Equal(fmt.Sprintf("bootstrap ./magus with `%s`, then ready the checkout with `%s`, each alone on its line", bootstrap, ready), fix.say)

@@ -86,7 +86,7 @@ stdin $WORK/touch.json
 exec sh -c 'sh "$0"; echo "exit $?"' $WORK/pre.sh
 stdout '^exit 2$'
 stderr 'GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache \.'
-stderr 'hack/dev/bootstrap-checkout.buzz -- --here --verify-ready'
+stderr 'hack/dev/bootstrap-checkout.buzz'
 ! stderr 'self update'
 stdin $WORK/bootstrap.json
 exec sh -c 'sh "$0"; echo "exit $?"' $WORK/pre.sh

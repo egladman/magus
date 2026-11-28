@@ -933,5 +933,5 @@ func recoversOwnCheckout(line, root string) bool {
 	words := magusSubcommandWords(args)
 	dash := slices.Index(args, "--")
 	return len(words) == 2 && words[0] == "buzz" && job.RunsCheckoutHook(words[1], checkoutHook(root)) &&
-		dash >= 0 && slices.Equal(args[dash+1:], []string{"--here", "--recover"})
+		dash >= 0 && slices.Equal(args[dash+1:], []string{"--recover"})
 }

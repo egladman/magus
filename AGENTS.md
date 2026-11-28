@@ -101,7 +101,7 @@ saying it, delete it here.
   harness, and verifies hook wiring. It never requires a provider's optional plugin.
 - A fresh worktree has no `./magus`, and the guard names two lines. A bare
   `go build` only links `./magus`. Then
-  `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready`
+  `./magus buzz hack/dev/bootstrap-verification.buzz`
   installs every project's dependencies and every declared harness's tool rows.
   It also builds the graph, the symbol digest and the proofread binary the commit
   guard runs.

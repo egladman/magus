@@ -1025,7 +1025,7 @@ func (s *CheckoutHookSuite) TestAHookOutsideTheWorkspaceIsAnError() {
 }
 
 func (s *CheckoutHookSuite) TestTheCommandNamesTheHook() {
-	s.Equal("./magus buzz "+testHook+" -- --checkout /w", CheckoutBootstrap(testHook, "/w"))
+	s.Equal("./magus buzz "+testHook+" -- -C /w", CheckoutBootstrap(testHook, "/w"))
 }
 
 func (s *CheckoutHookSuite) TestNoHookSaysNoneIsDeclared() {
@@ -1124,7 +1124,7 @@ func (s *ReviewCheckoutSuite) TestBootstrapRunsInstallsThenHarnessesThenTheHook(
 		{dir: dir, args: "run install ."},
 		{dir: dir, args: "run install console"},
 		{dir: dir, args: "agent harness install"},
-		{dir: s.repo.Root(), args: fmt.Sprintf("buzz %s -- --checkout %s --install none", testHook, dir)},
+		{dir: s.repo.Root(), args: fmt.Sprintf("buzz %s -- -C %s --install none", testHook, dir)},
 	}, s.calls)
 	s.Equal(ReviewBootstrap{Ran: true, Install: []string{".", "console"}, Harnesses: true, Hook: testHook}, rec.Bootstrap)
 }

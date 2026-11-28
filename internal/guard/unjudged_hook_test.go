@@ -63,7 +63,7 @@ func (s *UnjudgedHookSuite) TestAWorkspaceWithNoRootGetsTheReleaseToo() {
 func (s *UnjudgedHookSuite) TestACheckoutOfMagusRepairsFromSource() {
 	lines := repairLines(s.sourceRoot("hack/dev/bootstrap-checkout.buzz"))
 	s.Contains(lines, ward.BootstrapCommand)
-	s.Contains(lines, "./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready")
+	s.Contains(lines, "./magus buzz hack/dev/bootstrap-checkout.buzz")
 	s.NotContains(lines, ward.RelinkAt(""), "no ./magus to relink")
 	s.NotContains(lines, "magus self update")
 }

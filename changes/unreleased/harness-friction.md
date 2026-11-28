@@ -7,7 +7,7 @@
   decides whether the work reached the base branch, so a running or exited row with no
   result is no longer kept live.
 - **The no-binary stale hint names the line that readies the checkout.** A fresh checkout
-  is told to bootstrap `./magus` and then run the checkout's verify-ready line, which
+  is told to bootstrap `./magus` and then run the checkout's ready line, which
   installs the tool rows the build alone leaves out.
 - **`hack/ci/show-failures.buzz` writes its gh-log fallback to stderr.** Stdout carries
   output records only.

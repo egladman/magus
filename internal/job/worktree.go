@@ -724,7 +724,7 @@ func CheckoutBootstrap(hook, dir string) string {
 	if hook == "" {
 		return NoCheckoutHook
 	}
-	return fmt.Sprintf("./magus buzz %s -- --checkout %s", hook, dir)
+	return fmt.Sprintf("./magus buzz %s -- -C %s", hook, dir)
 }
 
 // RunsCheckoutHook reports whether script, the file a `magus buzz` call
@@ -891,7 +891,7 @@ func (r ReviewCheckout) bootstrap(ctx context.Context, dir string, skip bool) (R
 		rec.HookNote = NoCheckoutHook
 		return rec, nil
 	}
-	if err := r.Magus(ctx, r.Root, "buzz", hook, "--", "--checkout", dir, "--install", noInstall); err != nil {
+	if err := r.Magus(ctx, r.Root, "buzz", hook, "--", "-C", dir, "--install", noInstall); err != nil {
 		return rec, fmt.Errorf("`%s`: %w", CheckoutBootstrap(hook, dir), err)
 	}
 	return rec, nil

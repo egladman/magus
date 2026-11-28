@@ -1,15 +1,9 @@
 // Cost: one merge and one regeneration per branch, and a push each.
 //
-// Brings a list of branches up to date, in order. Each branch is made
-// verify-ready
-// (bootstrap-checkout.buzz) so ./magus is built at its head. It is merged with
-// --base, `magus vcs resolve --against` settling generated conflicts, and
-// committed. ./magus is rebuilt at the merged head before the push. A failed
-// rebuild stops the run. The branches are independent by default; --stack makes
-// each merge the branch before it instead. A branch another worktree has checked out is merged
-// in that worktree; any other is switched to here. It stops at the first branch holding a
-// conflict in a source file and lists the files. Every tree it touches must be clean. --dry-run
-// prints the steps and runs none.
+// Merges --base into each listed branch in order. It readies each branch with
+// bootstrap-verification.buzz and settles generated conflicts with `magus vcs
+// resolve --against`. --stack merges each into the branch before it. It stops at
+// the first source conflict.
 //
 //	magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <a,b,c> [--base <ref>] [--stack] [--dry-run]
 namespace mergebaseintobranches;
@@ -47,7 +41,7 @@ export object Ran {
     code: int = 0,
 }
 
-// Shell is every git, magus and verify-ready call the script makes, so a test
+// Shell is every git, magus and bootstrap-verification call the script makes, so a test
 // answers them. git
 // and run never raise on a failed command; the caller reads code. dir "" is this checkout.
 export object Shell {
@@ -139,10 +133,10 @@ export fun plan(s: Step, dir: str) > [str] {
     }
     final found = mut [
         where,
-        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready",
+        "magus buzz hack/dev/bootstrap-verification.buzz",
         "magus {resolveArgv(s.against).join(" ")}",
         "git commit --no-edit (when the merge is in progress)",
-        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready (again, at the merged head)",
+        "magus buzz hack/dev/bootstrap-verification.buzz (again, at the merged head)",
     ];
     if (s.push) {
         found.append("git push origin {s.branch}");
@@ -209,7 +203,7 @@ export fun update(sh: Shell, s: Step, dir: str) > result\Result::<bool> {
             return result\Result::<bool>{ error = err };
         }
         foreach (line in ready.value!) {
-            std\print("verify-ready: {line}");
+            std\print("bootstrap-verification: {line}");
         }
     }
     final resolved = sh.run(dir, sub: "vcs", args: resolveArgv(s.against).sub(1));
@@ -243,10 +237,10 @@ fun finish(sh: Shell, s: Step, dir: str) > result\Result::<bool> {
     }
     final rebuilt = sh.ready(dir);
     if (rebuilt.error -> err) {
-        return result\fail::<bool>("merge-base-into-branches: rebuilding ./magus at the merged head of {s.branch} failed, so nothing was pushed; rebuild it by hand (bootstrap-checkout.buzz --here --verify-ready) before any other call there: {err.message}");
+        return result\fail::<bool>("merge-base-into-branches: rebuilding ./magus at the merged head of {s.branch} failed, so nothing was pushed; rebuild it by hand (hack/dev/bootstrap-verification.buzz) before any other call there: {err.message}");
     }
     foreach (line in rebuilt.value!) {
-        std\print("verify-ready: {line}");
+        std\print("bootstrap-verification: {line}");
     }
     if (!s.push) {
         std\print("updated {s.branch} against {s.against}; not pushed, pass --push to publish it");
@@ -362,7 +356,7 @@ fun liveShell() > Shell {
         },
         ready = fun (dir: str) > result\Result::<[str]> {
             try {
-                return result\ok::<[str]>(bootstrap\verifyReady(bootstrap\liveHost(), dir: if (dir == "") vcs\root() else dir));
+                return result\ok::<[str]>(bootstrap\readyCheckout(bootstrap\liveHost(), dir: if (dir == "") vcs\root() else dir));
             } catch (err: any) {
                 return result\caught::<[str]>(err, doing: "merge-base-into-branches: ready the checkout for the gate");
             }
@@ -535,10 +529,10 @@ test "a step's argv and plan name the branch and what it merges" {
     assert\equal(resolveArgv("origin/main"), want: ["vcs", "resolve", "--against", "origin/main"], message: "argv");
     assert\equal(plan(Step{ branch = "b", against = "a", push = true }, dir: ""), want: [
         "git switch b",
-        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready",
+        "magus buzz hack/dev/bootstrap-verification.buzz",
         "magus vcs resolve --against a",
         "git commit --no-edit (when the merge is in progress)",
-        "magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready (again, at the merged head)",
+        "magus buzz hack/dev/bootstrap-verification.buzz (again, at the merged head)",
         "git push origin b",
     ], message: "plan");
     assert\equal(plan(Step{ branch = "b", against = "a" }, dir: "/other")[0], want: "run in /other, where b is checked out", message: "worktree");

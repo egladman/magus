@@ -362,7 +362,7 @@ func (s *CheckoutHookSuite) SetupTest() {
 }
 
 func (s *CheckoutHookSuite) TestAWorkspaceDeclaringNoHookMatchesNoBootstrapLine() {
-	cmds, ok := ParseCommandsDialect("./magus buzz "+testCheckoutHook+" -- --here", effectiveDialect(""))
+	cmds, ok := ParseCommandsDialect("./magus buzz "+testCheckoutHook+"", effectiveDialect(""))
 	s.Require().True(ok)
 	_, matched := checkoutBootstrapDir(cmds, s.root, checkoutHook(s.root))
 	s.False(matched)
@@ -370,7 +370,7 @@ func (s *CheckoutHookSuite) TestAWorkspaceDeclaringNoHookMatchesNoBootstrapLine(
 
 func (s *CheckoutHookSuite) TestTheDeclaredHookMatchesItsBootstrapLine() {
 	declareCheckoutHook(s.T(), s.root)
-	cmds, ok := ParseCommandsDialect("./magus buzz "+testCheckoutHook+" -- --here", effectiveDialect(""))
+	cmds, ok := ParseCommandsDialect("./magus buzz "+testCheckoutHook+"", effectiveDialect(""))
 	s.Require().True(ok)
 	dir, matched := checkoutBootstrapDir(cmds, s.root, checkoutHook(s.root))
 	s.True(matched)
@@ -413,7 +413,7 @@ func (s *CheckoutBootstrapSuite) verdict(lease, cwd, command string) ShellVerdic
 func (s *CheckoutBootstrapSuite) refused(v ShellVerdict, lease string) {
 	s.Equal(denyRuleRawTool, v.Rule.Name)
 	s.Contains(v.Deny, "builds ./magus under lease "+lease)
-	s.Contains(v.Deny, "--checkout ", "names the command")
+	s.Contains(v.Deny, " -- -C ", "names the command")
 	s.Contains(v.Why, unpinnedRebuild)
 }
 
@@ -426,7 +426,7 @@ func (s *CheckoutBootstrapSuite) TestTheHolderOfTheCheckoutIsRefused() {
 }
 
 func (s *CheckoutBootstrapSuite) TestTheHolderIsRefusedHere() {
-	s.refused(s.verdict(s.holder.ID, s.checkout, "./magus buzz hack/dev/bootstrap-checkout.buzz -- --here"), s.holder.ID)
+	s.refused(s.verdict(s.holder.ID, s.checkout, "./magus buzz hack/dev/bootstrap-checkout.buzz"), s.holder.ID)
 }
 
 func (s *CheckoutBootstrapSuite) TestAnotherLeaseIsRefused() {

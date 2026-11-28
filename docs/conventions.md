@@ -770,7 +770,7 @@ The two revisions must match before the worker retries the refused call.
 Review each affected job before advancing it.
 
 When this repository's binary cannot load its sources or current store schema,
-run `./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --recover`.
+run `./magus buzz hack/dev/bootstrap-checkout.buzz -- --recover`.
 Recovery stops the daemon and rebuilds from the current working tree. It permits
 uncommitted changes and labels the result as a recovery build. Commit and
 validate the source and generated outputs before relying on a clean build.

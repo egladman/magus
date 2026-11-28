@@ -39,14 +39,14 @@ test "a build path whose every step runs past its bound names each one and still
     assert\equal(did.len(), want: 6, message: "never refuses");
 }
 
-test "verify-ready names its slow graph, digest, proofread, pool and skill steps" {
+test "bootstrap-verification names its slow graph, digest, proofread, pool and skill steps" {
     final said = mut [<str>];
-    _ = checkout\verifyReady(ticking(said, tick: 500000.0), dir: "/c");
+    _ = checkout\readyCheckout(ticking(said, tick: 500000.0), dir: "/c");
     assert\equal(names(said), want: ["server stop", "go build", "harness install", "ls jobs", "server stop --pools", "skill cleanup", "dependency install", "graph build", "symbol digest", "proofread build"], message: "slow steps");
 }
 
 test "steps within their bounds say nothing of being slow" {
     final said = mut [<str>];
-    _ = checkout\verifyReady(ticking(said, tick: 0.0), dir: "/c");
+    _ = checkout\readyCheckout(ticking(said, tick: 0.0), dir: "/c");
     assert\equal(names(said), want: [], message: "slow steps");
 }

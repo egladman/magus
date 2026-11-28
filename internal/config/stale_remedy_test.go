@@ -43,7 +43,7 @@ func (s *CheckoutHookAtSuite) TestNoMagusYAMLIsNone() {
 }
 
 func (s *CheckoutHookAtSuite) TestTheRemedyRunsTheDeclaredBootstrap() {
-	s.Equal("./magus buzz hack/dev/boot.buzz -- --here --verify-ready", ReadyCheckoutCommand("hack/dev/boot.buzz"))
+	s.Equal("./magus buzz hack/dev/boot.buzz", ReadyCheckoutCommand("hack/dev/boot.buzz"))
 }
 
 func (s *CheckoutHookAtSuite) TestWithoutAHookTheRemedyInstallsHarnesses() {

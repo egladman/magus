@@ -453,7 +453,7 @@ func rankOwnBuild(v ShellVerdict, oc *ownBuildOutcome) ShellVerdict {
 }
 
 // checkoutBootstrapDir is the checkout a line's magus call hands hook, the
-// workspace's checkout.bootstrap, by --checkout or --here, against cwd.
+// workspace's checkout.bootstrap: the -C operand after `--`, else cwd.
 // ok is false for a line running no such call.
 func checkoutBootstrapDir(cmds []hint.Invocation, cwd, hook string) (string, bool) {
 	for _, c := range cmds {
@@ -461,14 +461,14 @@ func checkoutBootstrapDir(cmds []hint.Invocation, cwd, hook string) (string, boo
 		if c.Name != "magus" || len(words) < 2 || words[0] != "buzz" || !job.RunsCheckoutHook(words[1], hook) {
 			continue
 		}
-		rest := c.Args[slices.Index(c.Args, "--")+1:]
+		var rest []string
+		if dash := slices.Index(c.Args, "--"); dash >= 0 {
+			rest = c.Args[dash+1:]
+		}
 		for i, a := range rest {
-			if a == "--here" {
-				return filepath.Clean(cwd), true
-			}
-			dir, joined := strings.CutPrefix(a, "--checkout=")
+			dir, joined := strings.CutPrefix(a, "-C=")
 			if !joined {
-				if a != "--checkout" || i+1 >= len(rest) {
+				if a != "-C" || i+1 >= len(rest) {
 					continue
 				}
 				dir = rest[i+1]
@@ -478,7 +478,7 @@ func checkoutBootstrapDir(cmds []hint.Invocation, cwd, hook string) (string, boo
 			}
 			return filepath.Clean(dir), true
 		}
-		return "", false
+		return filepath.Clean(cwd), true
 	}
 	return "", false
 }
@@ -508,7 +508,7 @@ func denyCheckoutBootstrap(ctx context.Context, deps Dependencies, command, hook
 		return denial{}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `magus buzz %s -- --checkout %s` builds ./magus under lease %s; the root places it.", hook, dir, deps.lease),
+		Say: fmt.Sprintf("magus workspace: `magus buzz %s -- -C %s` builds ./magus under lease %s; the root places it.", hook, dir, deps.lease),
 		Why: workerBuildVerdict + ". Only the root and the checkout's integrator run it.\n" + onePerBase + "\n" + unpinnedRebuild,
 	}
 }
