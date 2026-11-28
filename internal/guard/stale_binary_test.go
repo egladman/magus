@@ -103,7 +103,13 @@ func servesPlacement(t *testing.T, root string) {
 // checkout of magus at root, whoever asks.
 func staleOwnSay(root string) string {
 	return fmt.Sprintf("./magus was built from another contract than this tree carries and cannot load its guard policy; "+
-		"%s.", ward.RelinkAndStampAt(root))
+		"%s.", rebuildOwnFix(root))
+}
+
+// rebuildOwnFix is the one line a stale ./magus in the checkout of magus at
+// root is rebuilt and stamped with.
+func rebuildOwnFix(root string) string {
+	return fmt.Sprintf("rebuild and stamp ./magus with `GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .`, alone on its line", shellQuoted(root))
 }
 
 // noBinaryOwnSay is the verdict a checkout of magus at root with no ./magus opens with.
@@ -178,7 +184,7 @@ func TestPathMagusInAFromSourceCheckoutJudgesNothing(t *testing.T) {
 
 	v := judgeUnloaded(ctx, deps, "touch notes.txt")
 	assert.Equal(t, verdict.Deny, v.Decision, v.Reason)
-	assert.Contains(t, v.Reason, "relink ./magus, then stamp it, each alone on its line")
+	assert.Contains(t, v.Reason, rebuildOwnFix(root))
 }
 
 func TestPathMagusDropsTheStepRules(t *testing.T) {
@@ -213,7 +219,7 @@ func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
 
 	for _, line := range []string{"git push origin HEAD:topic", "./magus agent harness install", "./magus config set --global key=log.format,value=json", "touch notes.txt"} {
 		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, staleOwnSay(root))
-		assert.Contains(t, stored, "\n"+relinkWhy+"\n", line)
+		assert.Contains(t, stored, "\n"+rebuildWhy+"\n", line)
 		assert.NotContains(t, stored, "magus.old", line)
 	}
 
@@ -226,6 +232,7 @@ func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
 	for _, line := range []string{
 		"ls", "git status", "git diff --stat", "./magus describe job x", "./magus affected --explain test", "./magus run go-build .",
 		"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
+		ownBootstrapLine(root),
 	} {
 		v := judgeUnloaded(ctx, deps, line)
 		assert.NotEqual(t, verdict.Deny, v.Decision, "%s: %s", line, v.Reason)

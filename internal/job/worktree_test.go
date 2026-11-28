@@ -1328,21 +1328,36 @@ func (s *BinaryPinSuite) write(body string) {
 }
 
 func (s *BinaryPinSuite) refusal(bin string) string {
-	why, _ := s.refusalHeld(bin)
-	return why
+	return s.unpinned(bin).Why
 }
 
 // refusalHeld is refusal and whether the store reports bin's checkout unheld.
 func (s *BinaryPinSuite) refusalHeld(bin string) (string, bool) {
-	why, unheld, err := s.store.PinRefusal(s.T().Context(), bin)
+	u := s.unpinned(bin)
+	return u.Why, u.Unheld
+}
+
+func (s *BinaryPinSuite) unpinned(bin string) Unpinned {
+	u, err := s.store.PinRefusal(s.T().Context(), bin)
 	s.Require().NoError(err)
-	return why, unheld
+	return u
 }
 
 func (s *BinaryPinSuite) TestACheckoutARowWorksInIsHeldThoughNothingIsPinned() {
-	why, unheld := s.refusalHeld(s.bin)
-	s.False(unheld)
-	s.Contains(why, "job w1 works in its checkout")
+	u := s.unpinned(s.bin)
+	s.False(u.Unheld)
+	s.Contains(u.Why, "job w1 works in its checkout")
+	s.Require().Len(u.Holders, 1, "the hook weighs the binary against each holder's authority")
+	s.Equal("w1", u.Holders[0].ID)
+}
+
+func (s *BinaryPinSuite) TestARewrittenPinNamesNoHolders() {
+	_, err := s.store.PinBinary(s.T().Context(), "w1")
+	s.Require().NoError(err)
+	s.write("two, longer")
+	u := s.unpinned(s.bin)
+	s.Contains(u.Why, "its bytes do not hash to what job w1 pins")
+	s.Empty(u.Holders, "a pin the bytes moved past is vouched for by no authority")
 }
 
 func (s *BinaryPinSuite) TestACheckoutNoLiveRowWorksInIsUnheld() {

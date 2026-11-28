@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/clikit/output"
 	"github.com/egladman/magus/libs/codec"
+	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 	"github.com/egladman/magus/types"
 )
@@ -109,58 +111,124 @@ func BinaryCheckout(bin string) string {
 }
 
 // UnpinnedBinary says why the session may not hand a call to own, "" when it may.
-// It may when a live row records own's hash, or no live row works in own's
-// checkout and [unheldRefusal] takes own. own's report of itself never takes a held
-// checkout: a worker that rebuilt it would pick its judge. It skips the sweep.
+// It may when a live row records own's hash. Where no row records it, an unheld
+// checkout takes own by [unheldRefusal] and a held one by [heldRefusal]. It skips
+// the sweep.
 func (e HookEnv) UnpinnedBinary(ctx context.Context, own, session string) string {
 	store, err := e.OpenJobs(ctx, session)
 	if err != nil {
 		return fmt.Sprintf("the job store of %s, which pins every binary this hands a call to, did not open: %v", session, err)
 	}
-	why, unheld, err := store.PinRefusal(ctx, own)
+	pin, err := store.PinRefusal(ctx, own)
 	if err != nil {
 		return fmt.Sprintf("whether a job row pins it cannot be read: %v", err)
 	}
-	if why == "" || !unheld {
-		return why
+	var refused string
+	switch {
+	case pin.Why == "":
+		return ""
+	case pin.Unheld:
+		refused = unheldRefusal(ctx, own, session, buildinfo.Self())
+	case len(pin.Holders) > 0:
+		refused = heldRefusal(ctx, own, session, buildinfo.Self(), pin.Holders)
+	default:
+		return pin.Why
 	}
-	refused := unheldRefusal(ctx, own, session, buildinfo.Self())
 	if refused == "" {
 		return ""
 	}
-	return fmt.Sprintf("%s, and %s", why, refused)
+	return fmt.Sprintf("%s, and %s", pin.Why, refused)
 }
 
 // unheldRefusal says why own may not judge in place of self, "" when it may. No
 // worker picks a binary where no row works. Only a newer clean stamp takes over.
 func unheldRefusal(ctx context.Context, own, session string, self types.MagusBuild) string {
+	_, why := replacementStamp(ctx, own, session, self)
+	return why
+}
+
+// heldRefusal is unheldRefusal for a checkout holders work in. own must also be
+// go-build's clean stamp of a commit every holder's authority holds. Only the
+// root and the integrator move an authority. A worker's commits sit past it.
+func heldRefusal(ctx context.Context, own, session string, self types.MagusBuild, holders []job.Job) string {
+	stamp, why := replacementStamp(ctx, own, session, self)
+	switch {
+	case why != "":
+		return why
+	case stamp.Version == "" || stamp.Version == buildinfo.UnknownVersion:
+		return "go-build did not stamp it, so it names no commit it was built from"
+	}
+	checkout := filepath.Dir(own)
+	var behind []string
+	for _, r := range holders {
+		if r.Authority == "" {
+			return fmt.Sprintf("job %s carries no authority, so no commit there is the root's", r.ID)
+		}
+		if _, err := gitNames(ctx, checkout, "merge-base", "--is-ancestor", stamp.Commit, r.Authority); err != nil {
+			behind = append(behind, r.ID)
+		}
+	}
+	if len(behind) == 0 {
+		return ""
+	}
+	held := fmt.Sprintf("it was built at %.12s, which the authority of job %s does not hold", stamp.Commit, strings.Join(behind, ", job "))
+	if _, err := gitNames(ctx, checkout, "merge-base", "--is-ancestor", stamp.Commit, "HEAD"); err != nil {
+		if line := ownBootstrapLine(checkout); line != "" {
+			return fmt.Sprintf("%s, nor does the checkout's HEAD; rebuild it at HEAD with `%s`", held, line)
+		}
+		return held + ", nor does the checkout's HEAD"
+	}
+	argv := slices.Concat([]string{filepath.Join(session, "magus"), "--root", checkout, "job", "advance"}, behind)
+	if line, ok := quoteArgv(argv); ok {
+		return fmt.Sprintf("%s; once the root has read the commits since, `%s` moves it to the checkout's HEAD", held, line)
+	}
+	return held
+}
+
+// replacementStamp is own's build stamp, and why own may not judge in place of
+// self, "" when it may. It may when it is a checkout root of the session's
+// repository, stamped clean and newer than self.
+func replacementStamp(ctx context.Context, own, session string, self types.MagusBuild) (reportedBuild, string) {
 	root, common, ok := gitCheckout(filepath.Dir(own))
 	_, sessionCommon, sessionOK := gitCheckout(session)
 	switch {
 	case !ok || root != canonicalPath(filepath.Dir(own)):
-		return "its directory is no checkout's root"
+		return reportedBuild{}, "its directory is no checkout's root"
 	case !sessionOK || canonicalPath(common) != canonicalPath(sessionCommon):
-		return "its checkout is not of this session's repository"
+		return reportedBuild{}, "its checkout is not of this session's repository"
 	case self.Source == types.BuildSourceNone:
-		return "this binary carries no build stamp to compare it with"
+		return reportedBuild{}, "this binary carries no build stamp to compare it with"
 	}
 	stamp, err := reportedStamp(ctx, own)
 	if err != nil {
-		return err.Error()
+		return reportedBuild{}, err.Error()
 	}
-	if err := self.AcceptsReplacement(stamp); err != nil {
-		return fmt.Sprintf("this binary would not take it as its replacement: %v", err)
+	if err := self.AcceptsReplacement(stamp.stamp()); err != nil {
+		return reportedBuild{}, fmt.Sprintf("this binary would not take it as its replacement: %v", err)
 	}
-	return ""
+	return stamp, ""
 }
 
 // stampTimeout bounds the version call, which spends the hook's own budget.
 const stampTimeout = 2 * time.Second
 
+// reportedBuild is what `magus version -o json` says of a build. Version is
+// [buildinfo.UnknownVersion] when go-build linked none.
+type reportedBuild struct {
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	Dirty     bool   `json:"dirty"`
+	BuildDate string `json:"build_date"`
+}
+
+func (b reportedBuild) stamp() types.BuildStamp {
+	return types.BuildStamp{Commit: b.Commit, Dirty: b.Dirty, BuildDate: b.BuildDate}
+}
+
 // reportedStamp asks bin for its build stamp. The sentinel keeps bin from re-execing
 // into another ./magus to answer. It copies selfupdate's readPlaceStamp, whose errors
 // speak for `magus self place`.
-func reportedStamp(ctx context.Context, bin string) (types.BuildStamp, error) {
+func reportedStamp(ctx context.Context, bin string) (reportedBuild, error) {
 	ctx, cancel := context.WithTimeout(ctx, stampTimeout)
 	defer cancel()
 	var out bytes.Buffer
@@ -169,11 +237,11 @@ func reportedStamp(ctx context.Context, bin string) (types.BuildStamp, error) {
 	cmd.Env = append(os.Environ(), workspace.BootstrapExecSentinelVar+"=1")
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
-		return types.BuildStamp{}, fmt.Errorf("it did not report its version: %w", err)
+		return reportedBuild{}, fmt.Errorf("it did not report its version: %w", err)
 	}
-	var stamp types.BuildStamp
+	var stamp reportedBuild
 	if err := codec.Unmarshal(out.Bytes(), &stamp); err != nil {
-		return types.BuildStamp{}, fmt.Errorf("it reported a version this binary cannot read: %w", err)
+		return reportedBuild{}, fmt.Errorf("it reported a version this binary cannot read: %w", err)
 	}
 	return stamp, nil
 }
