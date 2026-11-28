@@ -13,9 +13,8 @@ import (
 	"github.com/gofrs/flock"
 )
 
-// stoppedRun is a recorded run that stopped before its end, as [stoppedRuns] lists it.
-// It stays unexported until a caller outside the package reads it.
-type stoppedRun struct {
+// StoppedRun is a recorded run that stopped before its end, as [StoppedRuns] lists it.
+type StoppedRun struct {
 	Ref    string
 	Script string
 	Args   []string
@@ -25,12 +24,14 @@ type stoppedRun struct {
 	// Resume is the command that resumes the run. It resumes only under the lease the
 	// run was recorded under, since the lease is part of the ref.
 	Resume string
+	// Restart is the command that discards the record and runs the script from the top.
+	Restart string
 }
 
-// stoppedRuns lists, in ref order, each record under dir that did not finish and whose
+// StoppedRuns lists, in ref order, each record under dir that did not finish and whose
 // writer is dead. A missing dir holds none. An unreadable record is left out and its
-// error joined into the one returned.
-func stoppedRuns(dir string) ([]stoppedRun, error) {
+// error joined into the one returned. It reads files and starts nothing.
+func StoppedRuns(dir string) ([]StoppedRun, error) {
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -38,7 +39,7 @@ func stoppedRuns(dir string) ([]stoppedRun, error) {
 	if err != nil {
 		return nil, fmt.Errorf("replay: %w", err)
 	}
-	var runs []stoppedRun
+	var runs []StoppedRun
 	var errs []error
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -55,24 +56,24 @@ func stoppedRuns(dir string) ([]stoppedRun, error) {
 	return runs, errors.Join(errs...)
 }
 
-func readStopped(dir, ref string) (stoppedRun, bool, error) {
+func readStopped(dir, ref string) (StoppedRun, bool, error) {
 	path := filepath.Join(dir, ref, recordFile)
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return stoppedRun{}, false, nil
+		return StoppedRun{}, false, nil
 	}
 	if err != nil {
-		return stoppedRun{}, false, fmt.Errorf("replay: %w", err)
+		return StoppedRun{}, false, fmt.Errorf("replay: %w", err)
 	}
 	h, calls, finished, err := parse(path, raw[:bytes.LastIndexByte(raw, '\n')+1])
 	if err != nil || finished {
-		return stoppedRun{}, false, err
+		return StoppedRun{}, false, err
 	}
 	alive, err := writerAlive(path + ".lock")
 	if err != nil || alive {
-		return stoppedRun{}, false, err
+		return StoppedRun{}, false, err
 	}
-	run := stoppedRun{Ref: ref, Script: h.Script, Args: h.Args, Resume: resumeCommand(h)}
+	run := StoppedRun{Ref: ref, Script: h.Script, Args: h.Args, Resume: rerunCommand(h, false), Restart: rerunCommand(h, true)}
 	for i := len(calls) - 1; i >= 0; i-- {
 		if calls[i].End == callOpen {
 			run.Open = &calls[i]
@@ -96,10 +97,14 @@ func writerAlive(lockPath string) (bool, error) {
 	return false, lock.Unlock()
 }
 
-// resumeCommand is the command line that reruns h's script with its arguments. The
-// arguments follow `--`, so none is read as a magus flag.
-func resumeCommand(h Header) string {
-	words := []string{"magus", "buzz", "--record", shellWord(h.Script)}
+// rerunCommand is the command line that reruns h's script with its arguments, from the
+// top when restart is set. The arguments follow `--`, so none is read as a magus flag.
+func rerunCommand(h Header, restart bool) string {
+	words := []string{"magus", "buzz", "--record"}
+	if restart {
+		words = append(words, "--restart")
+	}
+	words = append(words, shellWord(h.Script))
 	if len(h.Args) > 0 {
 		words = append(words, "--")
 		for _, a := range h.Args {

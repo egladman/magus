@@ -28,18 +28,19 @@ func (s *StoppedRunsSuite) stopped(ref string, h Header) {
 	s.Require().NoError(r.Close())
 }
 
-func (s *StoppedRunsSuite) TestARunWhoseWriterIsGoneIsListedWithItsOpenCallAndResume() {
+func (s *StoppedRunsSuite) TestARunWhoseWriterIsGoneIsListedWithItsOpenCallAndCommands() {
 	s.stopped("out1", Header{Script: "hack/dev/land.buzz", Args: []string{"--dry-run", "it's"}})
 
-	runs, err := stoppedRuns(s.dir)
+	runs, err := StoppedRuns(s.dir)
 	s.Require().NoError(err)
 	open := call(1, -1, "proc.exec")
-	s.Equal([]stoppedRun{{
-		Ref:    "out1",
-		Script: "hack/dev/land.buzz",
-		Args:   []string{"--dry-run", "it's"},
-		Open:   &open,
-		Resume: `magus buzz --record hack/dev/land.buzz -- --dry-run 'it'\''s'`,
+	s.Equal([]StoppedRun{{
+		Ref:     "out1",
+		Script:  "hack/dev/land.buzz",
+		Args:    []string{"--dry-run", "it's"},
+		Open:    &open,
+		Resume:  `magus buzz --record hack/dev/land.buzz -- --dry-run 'it'\''s'`,
+		Restart: `magus buzz --record --restart hack/dev/land.buzz -- --dry-run 'it'\''s'`,
 	}}, runs)
 }
 
@@ -49,7 +50,7 @@ func (s *StoppedRunsSuite) TestAFinishedRunIsNotListed() {
 	s.Require().NoError(r.Finish())
 	s.Require().NoError(r.Close())
 
-	runs, err := stoppedRuns(s.dir)
+	runs, err := StoppedRuns(s.dir)
 	s.Require().NoError(err)
 	s.Empty(runs)
 }
@@ -59,7 +60,7 @@ func (s *StoppedRunsSuite) TestARunALiveProcessWritesIsNotListed() {
 	s.Require().NoError(err)
 	defer func() { s.Require().NoError(r.Close()) }()
 
-	runs, err := stoppedRuns(s.dir)
+	runs, err := StoppedRuns(s.dir)
 	s.Require().NoError(err)
 	s.Empty(runs, "its writer holds the lock")
 }
@@ -69,9 +70,12 @@ func (s *StoppedRunsSuite) TestARunStoppedBetweenCallsHasNoOpenCall() {
 	s.Require().NoError(err)
 	s.Require().NoError(r.Close())
 
-	runs, err := stoppedRuns(s.dir)
+	runs, err := StoppedRuns(s.dir)
 	s.Require().NoError(err)
-	s.Equal([]stoppedRun{{Ref: "out1", Script: "run.buzz", Resume: "magus buzz --record run.buzz"}}, runs)
+	s.Equal([]StoppedRun{{
+		Ref: "out1", Script: "run.buzz",
+		Resume: "magus buzz --record run.buzz", Restart: "magus buzz --record --restart run.buzz",
+	}}, runs)
 }
 
 func (s *StoppedRunsSuite) TestAnUnreadableRecordIsReportedBesideTheRest() {
@@ -80,7 +84,7 @@ func (s *StoppedRunsSuite) TestAnUnreadableRecordIsReportedBesideTheRest() {
 	s.Require().NoError(os.MkdirAll(filepath.Dir(bad), 0o755))
 	s.Require().NoError(os.WriteFile(bad, []byte("not json\n"), 0o644))
 
-	runs, err := stoppedRuns(s.dir)
+	runs, err := StoppedRuns(s.dir)
 	s.Require().Error(err)
 	s.Contains(err.Error(), "out2")
 	s.Require().Len(runs, 1)
@@ -88,7 +92,7 @@ func (s *StoppedRunsSuite) TestAnUnreadableRecordIsReportedBesideTheRest() {
 }
 
 func (s *StoppedRunsSuite) TestAMissingDirHoldsNoRuns() {
-	runs, err := stoppedRuns(filepath.Join(s.dir, "absent"))
+	runs, err := StoppedRuns(filepath.Join(s.dir, "absent"))
 	s.Require().NoError(err)
 	s.Empty(runs)
 }

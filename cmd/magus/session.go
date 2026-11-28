@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/commands"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interp/replay"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/internal/sessions"
@@ -575,6 +577,9 @@ func sessionBriefCommand(ctx context.Context, root string) error {
 	switch opts.Format {
 	case outputText:
 		fmt.Print(payload.Text())
+		if dir, err := magus.ResolveCacheDir(root, workspace.WithLoadedConfig(globalCfg)); err == nil {
+			writeStoppedRuns(os.Stdout, filepath.Join(dir, "replay"))
+		}
 		return nil
 	case outputName:
 		// The revision, matching `magus session checkpoint -o name`: the one value
@@ -588,6 +593,30 @@ func sessionBriefCommand(ctx context.Context, root string) error {
 	case outputJSON, outputJSONL, outputTemplate, outputYAML:
 	}
 	return emitFormatted(opts, payload)
+}
+
+// writeStoppedRuns lists the recorded buzz runs under dir that stopped before their
+// end, with the commands that resume or restart each. It starts nothing. None prints
+// nothing, and an unreadable record is named, not skipped.
+func writeStoppedRuns(w io.Writer, dir string) {
+	runs, err := replay.StoppedRuns(dir)
+	if len(runs) == 0 && err == nil {
+		return
+	}
+	var b strings.Builder
+	b.WriteString("\ninterrupted recorded runs (magus resumes none by itself):\n")
+	for _, r := range runs {
+		where := "between calls"
+		if r.Open != nil {
+			where = fmt.Sprintf("inside call #%d %s", r.Open.Seq, r.Open.Name)
+		}
+		fmt.Fprintf(&b, "  %s %s stopped %s\n    resume:  %s\n    restart: %s\n",
+			r.Ref, r.Script, where, r.Resume, r.Restart)
+	}
+	if err != nil {
+		fmt.Fprintf(&b, "  unread: %v\n", err)
+	}
+	fmt.Fprint(w, b.String())
 }
 
 // admitSessionBrief takes the host-capacity claim for the workspace Inspect that
