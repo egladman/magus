@@ -763,6 +763,9 @@ func staleBinaryDenial(call judgedCall, cause unloadKind, failures []string, own
 			problem, fix.say = behind, refresh
 		}
 	}
+	if ready := readyCheckoutLine(root); own && ready != "" && (call.lease == "" || call.builds) && missingGenerated(failures) {
+		fix.say = fmt.Sprintf("a generated declaration the magusfile needs is missing, so no magus run can regenerate it; regenerate it with `%s`, alone on its line", ready)
+	}
 	var why strings.Builder
 	why.WriteString(call.what + " changes state, and the guard policy that would judge it is not running:")
 	for _, f := range failures {
@@ -786,6 +789,17 @@ func staleBinaryDenial(call judgedCall, cause unloadKind, failures []string, own
 	return denial{Say: fmt.Sprintf("%s; %s.", problem, fix.say), Why: why.String()}
 }
 
+// missingGenerated reports a load failure naming an undefined type (BZZ1002)
+// in a gen/ declaration file.
+func missingGenerated(failures []string) bool {
+	for _, f := range failures {
+		if strings.Contains(f, "BZZ1002") && strings.Contains(f, "undefined type") {
+			return true
+		}
+	}
+	return false
+}
+
 // mainRefreshFix is the problem and fix when judge is the main checkout's ./magus, built
 // at a commit behind origin/HEAD. A main checkout holding changes is a person's to refresh.
 func mainRefreshFix(root string, judge judgeIdentity) (problem, say string, ok bool) {
@@ -802,7 +816,7 @@ func mainRefreshFix(root string, judge judgeIdentity) (problem, say string, ok b
 		return "", "", false
 	}
 	problem = fmt.Sprintf("%s, built at %.12s, is older than %s at %.12s and cannot load this tree", bin, judge.commit, base, tip)
-	lines := fmt.Sprintf("`git -C %s pull --ff-only`, then `%s --root %s run go-build %s`", main, bin, main, main)
+	lines := fmt.Sprintf("`git -C %s pull --ff-only`, then `%s --root %s run go-build .`", main, bin, main)
 	if !onBaseBranch(ctx, main) {
 		lines = fmt.Sprintf("`git -C %s switch %s`, %s", main, base, lines)
 	}

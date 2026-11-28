@@ -2,7 +2,6 @@ package ward
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -113,24 +112,10 @@ func (s *RelinkSuite) TestQuotesARootAShellWouldSplit() {
 	s.Equal(`GOEXPERIMENT=jsonv2 go -C '/a b/it'\''s' build -trimpath -o magus ./cmd/magus`, RelinkAt("/a b/it's"))
 }
 
-func (s *RelinkSuite) TestTheStampRunsTheRelinkedBinaryAtTheRoot() {
-	script := "'" + stampScript + "'"
-	s.Equal("GOEXPERIMENT=jsonv2 /src/magus/magus buzz -C /src/magus -e "+script, stampAt("/src/magus"))
-	s.Equal("GOEXPERIMENT=jsonv2 ./magus buzz -e "+script, stampAt(""))
-	s.Equal(`GOEXPERIMENT=jsonv2 '/a b/magus' buzz -C '/a b' -e `+script, stampAt("/a b"))
-}
-
-func (s *RelinkSuite) TestTheStampLinksTheTreesOwnStampWithoutATargetRun() {
-	s.Contains(stampScript, `stale\buildStamp(".")`)
-	s.Contains(stampScript, "bindings.buildStamp=")
-	s.Contains(stampScript, `"./cmd/magus"`)
-	s.NotContains(stampScript, "run go-build", "a target run regenerates generated output")
-}
-
-func (s *RelinkSuite) TestAStampItCannotTakeSaysSoAndLinksNothing() {
-	taken, linked := strings.Index(stampScript, "the build stamp was not taken"), strings.Index(stampScript, `proc\exec("go"`)
-	s.NotEqual(-1, taken)
-	s.Less(taken, linked, "the throw comes before the link")
+func (s *RelinkSuite) TestTheStampRunsTheTreesSourceAtTheRoot() {
+	s.Equal("GOEXPERIMENT=jsonv2 go -C /src/magus run -trimpath ./cmd/magus run go-build --no-cache .", stampAt("/src/magus"))
+	s.Equal(BootstrapCommand, stampAt(""))
+	s.Equal("GOEXPERIMENT=jsonv2 go -C '/a b' run -trimpath ./cmd/magus run go-build --no-cache .", stampAt("/a b"))
 }
 
 func (s *RelinkSuite) TestTheRepairNamesTheRelinkThenTheStamp() {

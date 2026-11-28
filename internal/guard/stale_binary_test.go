@@ -953,7 +953,7 @@ func TestRecoveryLinePassesEveryCommandTheRemedyNames(t *testing.T) {
 			var named []string
 			switch {
 			case hasBinary && tc.builds:
-				named = []string{ward.RelinkAt(root), ward.RelinkAt("")}
+				named = []string{ward.RelinkAt(root), ward.RelinkAt(""), config.SourceCommand(root, "", "", true), ward.BootstrapCommand}
 			case tc.builds:
 				named = []string{ward.BootstrapCommand, config.SourceCommand(root, "", "", true)}
 			default:
@@ -1252,8 +1252,26 @@ func (s *MainRefreshSuite) deny() denial {
 func (s *MainRefreshSuite) TestTheOrchestratorIsToldToRefreshTheMainCheckout() {
 	d := s.deny()
 	s.Contains(d.Say, fmt.Sprintf("%s/magus, built at %.12s, is older than main at %.12s", s.main, s.judge.commit, s.tip))
-	s.Contains(d.Say, fmt.Sprintf("`git -C %[1]s pull --ff-only`, then `%[1]s/magus --root %[1]s run go-build %[1]s`, each alone on its line", s.main))
+	s.Contains(d.Say, fmt.Sprintf("`git -C %[1]s pull --ff-only`, then `%[1]s/magus --root %[1]s run go-build .`, each alone on its line", s.main))
 	s.NotContains(d.Say, "\n")
+}
+
+func (s *MainRefreshSuite) TestTheRefreshNamesTheProjectAsDotNotAnAbsolutePath() {
+	s.NotContains(s.deny().Say, "go-build "+s.main)
+}
+
+func (s *MainRefreshSuite) TestAMissingGeneratedTypeNamesTheCheckoutHook() {
+	root := s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "go.mod"), []byte(fmt.Sprintf("module %s\n", ownModule)), 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("checkout:\n  bootstrap: hack/dev/bootstrap-checkout.buzz\n"), 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(root, "magus"), []byte("binary"), 0o755))
+	failures := []string{`import "./hack/policy/guard": [BZZ1002] buzz: line 177:1: undefined type "NewDirs"`}
+
+	d := staleBinaryDenial(judgedCall{what: "this command", builds: true}, unloadStale, failures, true, root)
+	s.Contains(d.Say, "`./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready`")
+
+	d = staleBinaryDenial(judgedCall{what: "this command", builds: true}, unloadStale, []string{"import \"./x\": [BZZ1001] other"}, true, root)
+	s.NotContains(d.Say, "bootstrap-checkout.buzz")
 }
 
 func (s *MainRefreshSuite) TestADetachedMainCheckoutSwitchesBackFirst() {
