@@ -22,8 +22,12 @@ func TestAllDiagnosticCodesEnumerated(t *testing.T) {
 	root, err := filepath.Abs("..")
 	require.NoError(t, err)
 
-	src, err := os.ReadFile(filepath.Join(root, "types", "diagnostic.go"))
-	require.NoError(t, err)
+	var src []byte
+	for _, name := range []string{"diagnostic.go", "emit.go"} {
+		body, err := os.ReadFile(filepath.Join(root, "types", name))
+		require.NoError(t, err)
+		src = append(src, body...)
+	}
 
 	declared := regexp.MustCompile(`DiagnosticCode = "(MGS\d+)"`).FindAllStringSubmatch(string(src), -1)
 	require.NotEmpty(t, declared)
