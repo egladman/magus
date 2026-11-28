@@ -2,6 +2,7 @@ package guard
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -12,15 +13,15 @@ import (
 )
 
 // denyUnloadableCommit denies a commit, or a continue that commits,
-// in at's checkout while its working tree's magusfile does not load.
-// The commit carries the failure into the approved sources, and then
-// no side loads at all.
-func denyUnloadableCommit(asked *rulesAnswer, call judgedCall, at location) bool {
+// while at's magusfile fails on its author's error. That commit carries
+// the failure into the approved sources. A stale or missing ./magus is
+// the binary's failure, which the relink note answers.
+func denyUnloadableCommit(ctx context.Context, asked *rulesAnswer, call judgedCall, at location) bool {
 	if asked.loadFailure == nil || call.seam != seamCommand || asked.answer.Decision == verdict.Deny {
 		return false
 	}
 	verb := cmp.Or(commitVerb(call.command, call.dialect), continueVerb(call.command, call.dialect))
-	if verb == "" || !commitsHere(call, at) {
+	if verb == "" || !commitsHere(call, at) || unloadCause(ctx, asked.loadFailure, at, call.lease) != unloadNone {
 		return false
 	}
 	asked.answer = verdict.Verdict{Decision: verdict.Deny, Reason: unloadableCommitDenial(verb, asked.loadFailure).full()}

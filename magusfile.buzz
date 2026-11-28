@@ -391,10 +391,17 @@ fun ld_flags() > str {
 export fun opencode_runtime_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
               config_generate, mocks_generate, buzz_generate);
-    ctx.readsFiles(["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum", "mise.toml",
+    // The wasm's package closure under GOOS=js GOARCH=wasm; TestDeclaredReadsCoverTheClosure
+    // in internal/interp/bindings/opencode pins it to `go list -deps`.
+    ctx.readsFiles([
+        "internal/interp/bindings/opencode/*.go", "internal/interp/bindings/opencode/wasm/*.go",
+        "libs/codec/*.go", "libs/diagnostics/*.go",
+        "libs/gopherbuzz/*.go", "libs/gopherbuzz/ast/*.go", "libs/gopherbuzz/token/*.go",
+        "libs/gopherbuzz/types/*.go", "libs/gopherbuzz/vm/*.go",
+        "go.mod", "go.sum", "go.work", "go.work.sum", "mise.toml",
         "internal/interp/bindings/opencode/plugin.buzz",
         "libs/gopherbuzz/std/*.buzz", "libs/gopherbuzz/std/gen/*.buzz",
-        "libs/*/go.mod"]);
+        "libs/*/go.mod", "libs/*/go.sum"]);
     ctx.writesFiles(["spells/harness/opencode/gen/magus-opencode.wasm", "spells/harness/opencode/gen/wasm_exec.js"]);
     _ = proc\exec("go", ["generate", "./internal/interp/bindings/opencode"]);
 }
