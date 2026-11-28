@@ -454,6 +454,14 @@ github.com/egladman/magus/std.EditJudge.Covers field func(ctx context.Context, p
 github.com/egladman/magus/std.EditJudge.Grade field func(ctx context.Context, path string, before []byte, after []byte) error
 github.com/egladman/magus/std.EditJudgeFromContext func(ctx context.Context) (EditJudge, bool)
 github.com/egladman/magus/std.EffectiveCurrentWorkingDirectory func(ctx context.Context) (string, error)
+github.com/egladman/magus/std.Emit var Module
+github.com/egladman/magus/std.EmitFile func(_ context.Context, path string, t github.com/egladman/magus/types.Template) (github.com/egladman/magus/types.EmitFile, error)
+github.com/egladman/magus/std.EmitHole func(_ context.Context, value any, spec string, expression string) (github.com/egladman/magus/types.Template, error)
+github.com/egladman/magus/std.EmitJoin func(_ context.Context, parts []github.com/egladman/magus/types.Template, sep string) (github.com/egladman/magus/types.Template, error)
+github.com/egladman/magus/std.EmitLoad func(ctx context.Context, path string, values map[string]any) (github.com/egladman/magus/types.Result[github.com/egladman/magus/types.Template], error)
+github.com/egladman/magus/std.EmitPlan func(ctx context.Context, files []github.com/egladman/magus/types.EmitFile) (github.com/egladman/magus/types.EditPlan, error)
+github.com/egladman/magus/std.EmitRender func(ctx context.Context, t github.com/egladman/magus/types.Template, path string) (github.com/egladman/magus/types.Result[string], error)
+github.com/egladman/magus/std.EmitText func(_ context.Context, text string) (github.com/egladman/magus/types.Template, error)
 github.com/egladman/magus/std.Env var Module
 github.com/egladman/magus/std.EnvExpand func(ctx context.Context, s string) (string, error)
 github.com/egladman/magus/std.EnvGet func(ctx context.Context, name string) (string, error)
@@ -1907,13 +1915,22 @@ github.com/egladman/magus/types.EmitBadBraces const DiagnosticCode = "MGS1065"
 github.com/egladman/magus/types.EmitBadBytes const DiagnosticCode = "MGS1067"
 github.com/egladman/magus/types.EmitBadHeader const DiagnosticCode = "MGS1064"
 github.com/egladman/magus/types.EmitBadHole const DiagnosticCode = "MGS1066"
+github.com/egladman/magus/types.EmitBadShape const DiagnosticCode = "MGS1077"
+github.com/egladman/magus/types.EmitBlockShape const DiagnosticCode = "MGS1076"
+github.com/egladman/magus/types.EmitConversion const DiagnosticCode = "MGS1075"
 github.com/egladman/magus/types.EmitDiagnostic func(ctx context.Context, ev DiagnosticEvent)
+github.com/egladman/magus/types.EmitDuplicatePath const DiagnosticCode = "MGS1078"
 github.com/egladman/magus/types.EmitFile type struct
 github.com/egladman/magus/types.EmitFile.Path field string
 github.com/egladman/magus/types.EmitFile.Template field Template
 github.com/egladman/magus/types.EmitMissingValue const DiagnosticCode = "MGS1068"
+github.com/egladman/magus/types.EmitNoEncoding const DiagnosticCode = "MGS1071"
+github.com/egladman/magus/types.EmitNoFinalNewline const DiagnosticCode = "MGS1079"
 github.com/egladman/magus/types.EmitNullValue const DiagnosticCode = "MGS1070"
+github.com/egladman/magus/types.EmitRefusedValue const DiagnosticCode = "MGS1074"
+github.com/egladman/magus/types.EmitUnknownEncoding const DiagnosticCode = "MGS1072"
 github.com/egladman/magus/types.EmitUnusedValue const DiagnosticCode = "MGS1069"
+github.com/egladman/magus/types.EmitWrongKind const DiagnosticCode = "MGS1073"
 github.com/egladman/magus/types.Empty type struct
 github.com/egladman/magus/types.EncodeLeaseCheck func(c LeaseCheck) (github.com/egladman/magus/libs/safetyscissors/job.Check, error)
 github.com/egladman/magus/types.EngineNotLinked const DiagnosticCode = "MGS1104"

@@ -20,6 +20,7 @@ var Modules = ffi.Set{
 	"crypto":   {Register: RegisterCrypto, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"csv":      {Register: RegisterCsv, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/csv"},
 	"diff":     {Register: RegisterDiff, Capabilities: ffi.Capabilities(ffi.WASM)},
+	"emit":     {Register: RegisterEmit},
 	"env":      {Register: RegisterEnv, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"flags":    {Register: RegisterFlags, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"fmt":      {Register: RegisterFmt, Capabilities: ffi.Capabilities(ffi.WASM)},

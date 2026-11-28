@@ -135,6 +135,19 @@ var modules = []Module{
 		},
 	},
 	{
+		Name: "emit",
+		Doc:  "Code templates as values with typed holes: load a template file, fill its holes, render it for an output path and plan new files for splice to preview and apply.",
+		Methods: []Method{
+			{Name: "load", Doc: "Read a template file and bind every hole to its value. values must name every hole and nothing else, and no value may be null. Reads through the fs read policy and writes nothing. The Result's error lists every problem in the file, one per line.", Sig: "emit\\load(path: str, values: {str: any}) > result\\Result::<Template>"},
+			{Name: "text", Doc: "A str as static text: a template with no holes. No hole is parsed out of text.", Sig: "emit\\text(text: str) > Template"},
+			{Name: "hole", Doc: "A str or scalar as one hole with its encoding: a template of one hole. An int, a double or a bool is written in its string form, as !s writes it. expression names the hole in a refusal.", Sig: "emit\\hole(value: any, spec: str, expression: str = \"\") > Template"},
+			{Name: "join", Doc: "Parts joined with sep between them. sep is static text, and sep \"\" is template concatenation.", Sig: "emit\\join(parts: [Template], sep: str) > Template"},
+			{Name: "render", Doc: "The text a template becomes as the file at path. path's extension picks the encodings through the workspace's spell languages; no file is read or written.", Sig: "emit\\render(template: Template, path: str) > result\\Result::<str>"},
+			{Name: "file", Doc: "A file to write: path, resolved as fs paths are when planned, and the template it holds.", Sig: "emit\\file(path: str, template: Template) > EmitFile"},
+			{Name: "plan", Doc: "Render every file and resolve each as a new file under the lease, writing nothing. A path named twice, an output with no final newline and a path that exists with other bytes are refused. Refusals are fields of the plan; splice\\diff previews it and splice\\apply writes it.", Sig: "emit\\plan(files: [EmitFile]) > SplicePlan"},
+		},
+	},
+	{
 		Name: "env",
 		Doc:  "Process environment variable access.",
 		Methods: []Method{

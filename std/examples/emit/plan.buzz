@@ -7,7 +7,7 @@ object Case { name: str, fn: str, arg: str, want: str }
 
 // suiteFile loads one template per case, nests them in the suite template and
 // names the file the suite becomes.
-fun suiteFile(dir: str, cases: [Case]) > result\Result::<emit\File> {
+fun suiteFile(dir: str, cases: [Case]) > result\Result::<emit\EmitFile> {
     final parts = mut [<emit\Template>];
     foreach (c in cases) {
         final values: {str: any} = {
@@ -15,7 +15,7 @@ fun suiteFile(dir: str, cases: [Case]) > result\Result::<emit\File> {
             "fn": c.fn, "arg": c.arg, "want": c.want,
         };
         final one = emit\load("{dir}/case.go.tmpl", values: values);
-        if (one.error -> err) { return result\Result::<emit\File>{ error = err }; }
+        if (one.error -> err) { return result\Result::<emit\EmitFile>{ error = err }; }
         parts.append(one.value!);
     }
     final values: {str: any} = {
@@ -24,8 +24,8 @@ fun suiteFile(dir: str, cases: [Case]) > result\Result::<emit\File> {
         "cases": emit\join(parts, sep: "\n"),
     };
     final whole = emit\load("{dir}/suite_test.go.tmpl", values: values);
-    if (whole.error -> err) { return result\Result::<emit\File>{ error = err }; }
-    return result\Result::<emit\File>{ value = emit\file("price/price_suite_test.go", template: whole.value!) };
+    if (whole.error -> err) { return result\Result::<emit\EmitFile>{ error = err }; }
+    return result\Result::<emit\EmitFile>{ value = emit\file("price/price_suite_test.go", template: whole.value!) };
 }
 
 fun main(args: [str]) > void !> any {

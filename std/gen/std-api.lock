@@ -40,6 +40,13 @@ crypto.verify
 diff.equal
 diff.stat
 diff.unified
+emit.file
+emit.hole
+emit.join
+emit.load
+emit.plan
+emit.render
+emit.text
 env.expand
 env.get
 env.getOr

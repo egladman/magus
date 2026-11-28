@@ -160,6 +160,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "EditRefusal", Zero: types.EditRefusal{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEditRefusal(v.(types.EditRefusal)) }},
 	{Name: "EditSpan", Zero: types.EditSpan{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEditSpan(v.(types.EditSpan)) }},
 	{Name: "EditedFile", Zero: types.EditedFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEditedFile(v.(types.EditedFile)) }},
+	{Name: "EmitFile", Zero: types.EmitFile{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEmitFile(v.(types.EmitFile)) }},
 	{Name: "Empty", Zero: types.Empty{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEmpty(v.(types.Empty)) }},
 	{Name: "Encoding", Zero: spells.Encoding{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectEncoding(v.(spells.Encoding)) }},
 	{Name: "Entry", Zero: imagetypes.Entry{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImageEntry(v.(imagetypes.Entry), enums) }},
@@ -215,6 +216,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "ImpactSymbol", Zero: types.ImpactSymbol{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImpactSymbol(v.(types.ImpactSymbol)) }},
 	{Name: "ImportGraph", Zero: types.ImportGraph{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectImportGraph(v.(types.ImportGraph)) }},
 	{Name: "InputRef", Zero: types.InputRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectInputRef(v.(types.InputRef)) }},
+	{Name: "Interpolation", Zero: types.Interpolation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectInterpolation(v.(types.Interpolation)) }},
 	{Name: "Job", Zero: types.Job{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJob(v.(types.Job), enums) }},
 	{Name: "JobAttempt", Zero: job.CapturedRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobCapturedRun(v.(job.CapturedRun)) }},
 	{Name: "JobBlock", Zero: job.Block{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobBlock(v.(job.Block), enums) }},
@@ -449,6 +451,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "TargetRef", Zero: types.TargetRef{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetRef(v.(types.TargetRef)) }},
 	{Name: "TargetRun", Zero: daemon.TargetRun{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectStatusTargetRun(v.(daemon.TargetRun), enums) }},
 	{Name: "TargetSpellUse", Zero: types.TargetSpellUse{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTargetSpellUse(v.(types.TargetSpellUse)) }},
+	{Name: "Template", Zero: types.Template{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTemplate(v.(types.Template)) }},
 	{Name: "TermSize", Zero: types.TermSize{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectTermSize(v.(types.TermSize)) }},
 	{Name: "Theme", Zero: screen.Theme{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectScreenTheme(v.(screen.Theme)) }},
 	{Name: "TierEvidence", Zero: check.TierEvidence{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
