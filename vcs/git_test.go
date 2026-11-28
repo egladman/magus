@@ -4320,3 +4320,33 @@ func (s *GitCancelSuite) TestACancelledMergeLeavesNoDriverTempFiles() {
 		return err == nil && len(leaked) == 0
 	}, 15*time.Second, 100*time.Millisecond, "git removes the driver's copies once it finishes")
 }
+
+type gitOperationCommandsSuite struct{ suite.Suite }
+
+func TestGitOperationCommands(t *testing.T) { suite.Run(t, new(gitOperationCommandsSuite)) }
+
+func (s *gitOperationCommandsSuite) TestEveryStoppedOperationContinuesUnderItsOwnName() {
+	cmds, stops := gitVCS{}.OperationCommands()
+	s.True(stops)
+	s.Contains(cmds, types.OperationCommand{Op: types.OperationRebase, Step: types.OperationContinue, Argv: []string{"git", "rebase", "--continue"}})
+	s.Contains(cmds, types.OperationCommand{Op: types.OperationCherryPick, Step: types.OperationSkip, Argv: []string{"git", "cherry-pick", "--skip"}})
+	s.Contains(cmds, types.OperationCommand{Op: types.OperationRevert, Step: types.OperationAbort, Argv: []string{"git", "revert", "--abort"}})
+}
+
+func (s *gitOperationCommandsSuite) TestAMergeHasNoSkip() {
+	cmds, _ := gitVCS{}.OperationCommands()
+	s.NotContains(cmds, types.OperationCommand{Op: types.OperationMerge, Step: types.OperationSkip, Argv: []string{"git", "merge", "--skip"}})
+	s.Contains(cmds, types.OperationCommand{Op: types.OperationMerge, Step: types.OperationContinue, Argv: []string{"git", "merge", "--continue"}})
+}
+
+func (s *gitOperationCommandsSuite) TestTheTipIsAmended() {
+	cmd, ok := gitVCS{}.FoldCommand("abc1234", true)
+	s.True(ok)
+	s.Equal("git commit --amend --no-edit", cmd)
+}
+
+func (s *gitOperationCommandsSuite) TestACommitBelowTheTipTakesAFixup() {
+	cmd, ok := gitVCS{}.FoldCommand("abc1234", false)
+	s.True(ok)
+	s.Equal("git commit --fixup=abc1234 && GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash abc1234^", cmd)
+}

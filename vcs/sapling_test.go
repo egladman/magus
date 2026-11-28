@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // TestParseSaplingConflicts pins the `sl resolve --list` parse. Only U is a conflict: an R
@@ -466,4 +467,34 @@ func TestSaplingBranchHeadsListsBookmarks(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, head.ID, got["job"])
+}
+
+type slOperationCommandsSuite struct{ suite.Suite }
+
+func TestSaplingOperationCommands(t *testing.T) { suite.Run(t, new(slOperationCommandsSuite)) }
+
+func (s *slOperationCommandsSuite) TestEachOperationContinuesAndAborts() {
+	cmds, stops := saplingVCS{}.OperationCommands()
+	s.True(stops)
+	s.Contains(cmds, types.OperationCommand{Op: types.OperationRebase, Step: types.OperationContinue, Argv: []string{"sl", "rebase", "--continue"}})
+	s.Contains(cmds, types.OperationCommand{Op: types.OperationRebase, Step: types.OperationAbort, Argv: []string{"sl", "histedit", "--abort"}})
+	s.Contains(cmds, types.OperationCommand{Op: types.OperationCherryPick, Step: types.OperationContinue, Argv: []string{"sl", "graft", "--continue"}})
+}
+
+// Sapling aborts a merge only by a whole-tree revert, so no merge command is offered.
+func (s *slOperationCommandsSuite) TestNoMergeCommandIsListed() {
+	cmds, _ := saplingVCS{}.OperationCommands()
+	s.NotContains(cmds, types.OperationCommand{Op: types.OperationMerge, Step: types.OperationAbort, Argv: []string{"sl", "merge", "--abort"}})
+}
+
+func (s *slOperationCommandsSuite) TestTheTipIsAmended() {
+	cmd, ok := saplingVCS{}.FoldCommand("abc1234", true)
+	s.True(ok)
+	s.Equal("sl amend", cmd)
+}
+
+func (s *slOperationCommandsSuite) TestACommitBelowTheTipIsAmendedTo() {
+	cmd, ok := saplingVCS{}.FoldCommand("abc1234", false)
+	s.True(ok)
+	s.Equal("sl amend --to abc1234", cmd)
 }

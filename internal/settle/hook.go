@@ -1,75 +1,11 @@
 package settle
 
 import (
-	"context"
-	"fmt"
 	"maps"
-	"path/filepath"
 	"slices"
-	"strings"
 
-	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
-
-// Hook regenerates what the git operation op changed and stages the result, the settle
-// hooks' half of the merge driver. run executes one `<target>:rw <projects...>`
-// invocation; defines reports whether a project defines a target.
-//
-// Everything is bounded by what the operation changed. Its paths are classified against
-// the workspace's declarations, and only the projects that own a changed source or
-// output run their generate target, plus the exact targets the merge driver recorded
-// for the generated files it kept a side of. An operation that touches no generator's
-// input runs nothing: the Outcome's Ran is empty.
-//
-// A run or stage that fails leaves its regeneration owed in the git dir, where `magus
-// doctor` reports it, and the Outcome still names what ran.
-func Hook(ctx context.Context, m *magus.Magus, op vcs.HookOperation, defines func(path, target string) bool, run func(ctx context.Context, inv []string) error) (Outcome, error) {
-	files, err := m.ClassifyFiles(ctx, op.Changed)
-	if err != nil {
-		return Outcome{}, err
-	}
-	owed, err := vcs.OwedRegenerations(ctx, m.Root())
-	if err != nil {
-		return Outcome{}, err
-	}
-	var o Outcome
-	o.Ran = Invocations(generatorProjects(files), owed, defines)
-	if len(o.Ran) == 0 {
-		return o, nil
-	}
-	for _, inv := range o.Ran {
-		if err := run(ctx, inv); err != nil {
-			o.recordOwed(ctx, m, files)
-			return o, fmt.Errorf("%s: %w", hint.Run.With(inv...), err)
-		}
-	}
-	if o.Staged, err = stageRegenerated(ctx, m, op, o.Ran); err != nil {
-		o.recordOwed(ctx, m, files)
-		return o, err
-	}
-	if err := vcs.DropOwedRegenerations(ctx, m.Root(), owed); err != nil {
-		return o, err
-	}
-	return o, nil
-}
-
-// generatorProjects are the projects whose declared source or output the operation
-// changed, sorted. An output that moved counts too: it was regenerated against a base
-// this operation replaced, or the merge driver kept one side of it.
-func generatorProjects(files []types.FileEntry) []string {
-	set := types.SourceProjects(files)
-	for _, f := range files {
-		if f.Role == "output" {
-			for _, p := range f.OutputOf {
-				set[p] = true
-			}
-		}
-	}
-	return slices.Sorted(maps.Keys(set))
-}
 
 // Invocations groups the runs into one `<target>:rw <projects...>` invocation per
 // target, sorted by target: the generate target of every project in projects that
@@ -100,65 +36,4 @@ func Invocations(projects []string, owed []vcs.OwedRegeneration, defines func(pa
 		out = append(out, append([]string{target + ":rw"}, slices.Sorted(maps.Keys(groups[target]))...))
 	}
 	return out
-}
-
-// stageRegenerated stages every declared output the invocations rewrote and returns
-// them. Limited to the outputs of the projects that ran, so a file already modified
-// elsewhere is not swept into the merge.
-func stageRegenerated(ctx context.Context, m *magus.Magus, op vcs.HookOperation, ran [][]string) ([]string, error) {
-	rebuilt := map[string]bool{}
-	for _, inv := range ran {
-		for _, p := range inv[1:] {
-			rebuilt[p] = true
-		}
-	}
-	dirty, err := vcs.HookDirtyFiles(ctx, m.Root(), op)
-	if err != nil {
-		return nil, err
-	}
-	var paths []string
-	for _, path := range dirty {
-		producer := m.FindOutputProducer(filepath.Join(m.Root(), filepath.FromSlash(path)))
-		if producer != nil && rebuilt[projectKey(producer)] {
-			paths = append(paths, path)
-		}
-	}
-	if len(paths) == 0 {
-		return nil, nil
-	}
-	return paths, vcs.HookStage(ctx, m.Root(), op, paths)
-}
-
-// Outcome is what one Hook run did.
-type Outcome struct {
-	// Ran are the invocations Hook ran, or was running when it failed.
-	Ran [][]string
-	// Staged are the regenerated files Hook staged.
-	Staged []string
-}
-
-// recordOwed leaves the runs that did not settle owed in the git dir, each with the
-// changed outputs of its projects, so `magus doctor` reports them until a run does.
-func (o Outcome) recordOwed(ctx context.Context, m *magus.Magus, files []types.FileEntry) {
-	for _, inv := range o.Ran {
-		target := strings.TrimSuffix(inv[0], ":rw")
-		for _, project := range inv[1:] {
-			var paths []string
-			for _, f := range files {
-				if f.Role == "output" && slices.Contains(f.OutputOf, project) {
-					paths = append(paths, f.Path)
-				}
-			}
-			_, _ = vcs.RecordOwedRegeneration(ctx, m.Root(), vcs.OwedRegeneration{Project: project, Target: target, Paths: paths})
-		}
-	}
-}
-
-// Command is the shell command that repeats Ran.
-func (o Outcome) Command() string {
-	runs := make([]string, len(o.Ran))
-	for i, inv := range o.Ran {
-		runs[i] = hint.Run.With(inv...)
-	}
-	return strings.Join(runs, " && ")
 }

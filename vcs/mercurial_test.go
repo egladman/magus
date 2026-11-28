@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/internal/stamp"
 	"github.com/egladman/magus/types"
@@ -234,4 +235,42 @@ func TestReadHgFamilyHooks(t *testing.T) {
 			assert.Equal(t, "magus job run check-drift", got)
 		})
 	}
+}
+
+type hgOperationCommandsSuite struct{ suite.Suite }
+
+func TestHgOperationCommands(t *testing.T) { suite.Run(t, new(hgOperationCommandsSuite)) }
+
+func (s *hgOperationCommandsSuite) TestAHisteditContinuesAsTheRebaseItIs() {
+	cmds, stops := hgVCS{}.OperationCommands()
+	s.True(stops)
+	s.Contains(cmds, types.OperationCommand{Op: types.OperationRebase, Step: types.OperationContinue, Argv: []string{"hg", "rebase", "--continue"}})
+	s.Contains(cmds, types.OperationCommand{Op: types.OperationRebase, Step: types.OperationContinue, Argv: []string{"hg", "histedit", "--continue"}})
+	s.Contains(cmds, types.OperationCommand{Op: types.OperationCherryPick, Step: types.OperationAbort, Argv: []string{"hg", "graft", "--abort"}})
+}
+
+// A merge continues by `hg commit`, which records a commit, so only its abort is listed.
+func (s *hgOperationCommandsSuite) TestAMergeOnlyAborts() {
+	cmds, _ := hgVCS{}.OperationCommands()
+	s.Contains(cmds, types.OperationCommand{Op: types.OperationMerge, Step: types.OperationAbort, Argv: []string{"hg", "merge", "--abort"}})
+	s.NotContains(cmds, types.OperationCommand{Op: types.OperationMerge, Step: types.OperationContinue, Argv: []string{"hg", "merge", "--continue"}})
+}
+
+func (s *hgOperationCommandsSuite) TestARebaseHasNoSkip() {
+	cmds, _ := hgVCS{}.OperationCommands()
+	s.NotContains(cmds, types.OperationCommand{Op: types.OperationRebase, Step: types.OperationSkip, Argv: []string{"hg", "rebase", "--skip"}})
+}
+
+func (s *hgOperationCommandsSuite) TestTheTipIsAmended() {
+	cmd, ok := hgVCS{}.FoldCommand("abc1234", true)
+	s.True(ok)
+	s.Equal("hg commit --amend", cmd)
+}
+
+// Below the tip only an interactive histedit reaches the commit. hg says it has no
+// command rather than offer one that asks for a plan.
+func (s *hgOperationCommandsSuite) TestNoCommandFoldsBelowTheTip() {
+	cmd, ok := hgVCS{}.FoldCommand("abc1234", false)
+	s.False(ok)
+	s.Empty(cmd)
 }

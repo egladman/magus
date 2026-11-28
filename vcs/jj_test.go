@@ -271,3 +271,27 @@ func TestJJIgnoredFilesAnswersInPathsRelativeToDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"b.log"}, got)
 }
+
+type jjOperationCommandsSuite struct{ suite.Suite }
+
+func TestJJOperationCommands(t *testing.T) { suite.Run(t, new(jjOperationCommandsSuite)) }
+
+// jj answers that it never stops, rather than an empty list a caller could read as a
+// list it failed to match.
+func (s *jjOperationCommandsSuite) TestJJSaysItNeverStops() {
+	cmds, stops := jjVCS{}.OperationCommands()
+	s.False(stops)
+	s.Empty(cmds)
+}
+
+func (s *jjOperationCommandsSuite) TestASquashFoldsIntoTheTip() {
+	cmd, ok := jjVCS{}.FoldCommand("kxyz", true)
+	s.True(ok)
+	s.Equal("jj squash --into kxyz", cmd)
+}
+
+func (s *jjOperationCommandsSuite) TestASquashFoldsBelowTheTip() {
+	cmd, ok := jjVCS{}.FoldCommand("kxyz", false)
+	s.True(ok)
+	s.Equal("jj squash --into kxyz", cmd)
+}

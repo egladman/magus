@@ -99,6 +99,7 @@
 {"group":"file:changes/unreleased/claim-callers-of-a-symbol.md","path":"changes/unreleased/claim-callers-of-a-symbol.md"}
 {"group":"file:changes/unreleased/claim-sizing.md","path":"changes/unreleased/claim-sizing.md"}
 {"group":"file:changes/unreleased/clones-hg-jj-or-sapling-repository.md","path":"changes/unreleased/clones-hg-jj-or-sapling-repository.md"}
+{"group":"file:changes/unreleased/commit-load-asks-why.md","path":"changes/unreleased/commit-load-asks-why.md"}
 {"group":"file:changes/unreleased/compact-worker-records.md","path":"changes/unreleased/compact-worker-records.md"}
 {"group":"file:changes/unreleased/conformance-alias.md","path":"changes/unreleased/conformance-alias.md"}
 {"group":"file:changes/unreleased/conformance-sibling-sprawl.md","path":"changes/unreleased/conformance-sibling-sprawl.md"}
@@ -1801,8 +1802,6 @@
 {"group":"dir:libs/gopherbuzz/std/testdata","path":"libs/gopherbuzz/std/testdata/str_split.buzz"}
 {"group":"dir:libs/gopherbuzz/std/testdata","path":"libs/gopherbuzz/std/testdata/try_host_error.buzz"}
 {"group":"dir:libs/gopherbuzz/std/testdata","path":"libs/gopherbuzz/std/testdata/try_host_error_zdef.buzz"}
-{"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/call_interceptor.go"}
-{"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/call_interceptor_test.go"}
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/chunk.go"}
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/debug_types.go"}
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/env.go"}
@@ -1831,6 +1830,8 @@
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/heap_stats.go"}
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/heap_stats_other.go"}
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/heap_stats_test.go"}
+{"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/interceptor.go"}
+{"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/interceptor_test.go"}
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/jit.go"}
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/jit_amd64.go"}
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/jit_arm64.go"}

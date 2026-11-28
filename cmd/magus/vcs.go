@@ -263,7 +263,7 @@ func vcsResolveCommand(ctx context.Context, root string, rc runConfig, args []st
 			fmt.Println("vcs resolve: nothing to resolve; no conflicted paths")
 			return nil
 		}
-		return settle.OwedByHand(ctx, os.Stdout, m, res.VCS, interactive.DefinesTarget(ctx, m), settleRun(root, rc))
+		return settle.OwedByHand(ctx, os.Stdout, m, res, interactive.DefinesTarget(ctx, m), settleRun(root, rc))
 	}
 
 	if !globalCfg.DryRun {

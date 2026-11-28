@@ -4,12 +4,15 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // denyUnloadableCommit denies a commit, or a continue that commits,
@@ -29,24 +32,43 @@ func denyUnloadableCommit(ctx context.Context, asked *rulesAnswer, call judgedCa
 	return true
 }
 
-// continueVerb names, in backticks, the first git call on command that
-// continues an interrupted pick or merge, or a rebase or revert. It is
-// "" for none. Continuing commits the working tree.
+// continueVerb names, in backticks, the first call on command that
+// continues an operation its backend stopped in, "" for none.
+// Continuing commits the working tree.
 func continueVerb(command string, d Dialect) string {
 	cmds, ok := ParseCommandsDialect(command, d)
 	if !ok {
 		return ""
 	}
 	for _, c := range cmds {
-		if c.Name != "git" {
-			continue
-		}
-		sub, rest := vcsSubcommand(c)
-		if slices.Contains([]string{"cherry-pick", "merge", "rebase", "revert"}, sub) && slices.Contains(rest, "--continue") {
-			return fmt.Sprintf("`git %s --continue`", sub)
+		if oc, ok := operationCommand(c); ok && oc.Step == types.OperationContinue {
+			return fmt.Sprintf("`%s`", strings.Join(oc.Argv, " "))
 		}
 	}
 	return ""
+}
+
+// operationCommand is the command c's backend lists for the subcommand and
+// step flag c spells. A program no driver names spells none, and so does
+// jj, which never stops.
+func operationCommand(c hint.Invocation) (types.OperationCommand, bool) {
+	c.Name = path.Base(c.Name)
+	enabled := true
+	res, err := vcs.Resolve(context.Background(), "", "", types.VCSOptions{Name: c.Name, Enabled: &enabled})
+	if err != nil || res.VCS == nil {
+		return types.OperationCommand{}, false
+	}
+	cmds, stops := res.VCS.OperationCommands()
+	if !stops {
+		return types.OperationCommand{}, false
+	}
+	sub, rest := vcsSubcommand(c)
+	for _, oc := range cmds {
+		if oc.Argv[1] == sub && slices.Contains(rest, oc.Argv[2]) {
+			return oc, true
+		}
+	}
+	return types.OperationCommand{}, false
 }
 
 // commitsHere reports a commit whose checkout is at's workspace, the

@@ -159,10 +159,10 @@ func TestCheckDriftForCommit_Pushed(t *testing.T) {
 // TestBuildDriftNoticeUnpushedHead pins the amend case's exact wording: the commit is
 // still unambiguous to name (it is HEAD), so the notice hands over a plain amend.
 func TestBuildDriftNoticeUnpushedHead(t *testing.T) {
-	got := buildDriftNotice("abc1234", driftFinding{staleProjects: []string{"api"}}, driftUnpushedHead)
+	got := buildDriftNotice(namedDriver(t, "git"), "commit abc1234", "abc1234", []string{"api"}, driftUnpushedHead)
 	want := "[MGS4006] commit abc1234 left generated output stale (api changed with no matching regeneration).\n" +
 		"Regenerate: magus run generate:rw api\n" +
-		"Then fold it into abc1234 (unpushed, still HEAD):\n" +
+		"Then fold it into abc1234 (unpushed, still the tip):\n" +
 		"  git commit --amend --no-edit"
 	assert.Equal(t, want, got)
 }
@@ -171,10 +171,10 @@ func TestBuildDriftNoticeUnpushedHead(t *testing.T) {
 // the wrong commit (HEAD, not abc1234), so the notice names a fixup targeted at the
 // drifted hash, folded non-interactively via autosquash.
 func TestBuildDriftNoticeUnpushedNotHead(t *testing.T) {
-	got := buildDriftNotice("abc1234", driftFinding{staleProjects: []string{"api"}}, driftUnpushedNotHead)
+	got := buildDriftNotice(namedDriver(t, "git"), "commit abc1234", "abc1234", []string{"api"}, driftUnpushedNotHead)
 	want := "[MGS4006] commit abc1234 left generated output stale (api changed with no matching regeneration).\n" +
 		"Regenerate: magus run generate:rw api\n" +
-		"Then fold it into abc1234 (unpushed, but no longer HEAD):\n" +
+		"Then fold it into abc1234 (unpushed, but no longer the tip):\n" +
 		"  git commit --fixup=abc1234 && GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash abc1234^"
 	assert.Equal(t, want, got)
 }
@@ -182,7 +182,7 @@ func TestBuildDriftNoticeUnpushedNotHead(t *testing.T) {
 // TestBuildDriftNoticePushed pins the refusal case: NEITHER rewrite form appears,
 // anywhere in the string, because abc1234 already left the repository.
 func TestBuildDriftNoticePushed(t *testing.T) {
-	got := buildDriftNotice("abc1234", driftFinding{staleProjects: []string{"api"}}, driftPushed)
+	got := buildDriftNotice(namedDriver(t, "git"), "commit abc1234", "abc1234", []string{"api"}, driftPushed)
 	want := "[MGS4006] commit abc1234 left generated output stale (api changed with no matching regeneration).\n" +
 		"Regenerate: magus run generate:rw api\n" +
 		"abc1234 is already pushed; do not amend or rebase published history. Commit the fix as a new, follow-up commit instead."
@@ -197,7 +197,7 @@ func TestBuildDriftNoticePushed(t *testing.T) {
 // TestBuildDriftNoticeMultipleProjects covers the multi-project regenerate command: one
 // invocation naming every drifted project, not one per project.
 func TestBuildDriftNoticeMultipleProjects(t *testing.T) {
-	got := buildDriftNotice("abc1234", driftFinding{staleProjects: []string{"api", "web"}}, driftUnpushedHead)
+	got := buildDriftNotice(namedDriver(t, "git"), "commit abc1234", "abc1234", []string{"api", "web"}, driftUnpushedHead)
 	assert.Contains(t, got, "magus run generate:rw api web")
 	assert.Contains(t, got, "(api web changed with no matching regeneration)")
 }
