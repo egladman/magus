@@ -109,6 +109,10 @@ saying it, delete it here.
 
 ## Conventions
 
+- magus's own repository gets no privilege a consumer couldn't have
+  ([design](docs/design/principles/magus-is-its-own-first-consumer.md)). Before writing
+  Go under `internal/`, `cmd/`, `libs/` or `std/`, ask whether it holds in a repository
+  that is not magus. If not, it goes in `hack/` or behind a declaration Go reads.
 - New generated output goes in a `gen/` dir. A method set is written by hand
   (`types/enums.go`).
 - A type a magusfile or script reads lives in `types/`, not behind an alias.

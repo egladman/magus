@@ -95,6 +95,7 @@ automates a decision and when it hands the decision to you.
 - [Move fast, but leave nothing worse where it costs](design/principles/move-fast-leave-nothing-worse.md): Move as fast as you like inside a change, but a change may not make the codebase measurably worse where it is expensive, nor add debt nobody signed for.
 - [Measures in, verdicts out](design/principles/measures-in-verdicts-out.md): magus computes measures; a repository's own analyzers turn them into verdicts, under policy that repository types. No pass or fail is compiled into magus.
 - [Buzz modules live in their layer](design/principles/buzz-modules-live-in-their-layer.md): A Buzz module belongs to one of five layers; a generic library imports no magus module, and a product mechanism is embedded by the package that owns it.
+- [magus is its own first consumer](design/principles/magus-is-its-own-first-consumer.md): magus's own repository gets no privilege a consumer couldn't have; it fills the same declarations any workspace does, and the binary never asks whether it is running in magus's own checkout.
 
 ### Judgment
 
