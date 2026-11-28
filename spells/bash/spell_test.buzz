@@ -10,6 +10,18 @@ fun discover(paths: [str]) > [DiscoveredProject] {
     return bash\discover_projects(Target{}, req: DiscoveryQuery{root = "/repo", files = files});
 }
 
+test "shell declares ident and single-quoted string encodings" {
+    final encodings = bash\mgs_getLanguage().syntax!.encodings;
+    std\assert(encodings.map(fun (i: int, e: Encoding) > str => e.name).join(" ") == "ident string", message: "names");
+    std\assert(encodings[0].pattern == "^[A-Za-z_][A-Za-z0-9_]*$", message: "ASCII name");
+    std\assert(encodings[0].reserved.join(" ").indexOf(" fi ") != null, message: "fi refused");
+    final string = encodings[1];
+    std\assert(string.open == "'" and string.close == "'", message: "single quotes");
+    final escapes = string.escapes.map(fun (i: int, e: Escape) > str => "{e.text}={e.to}").join(" ");
+    std\assert(escapes == "'='\\'' \n=\n \r=\r \t=\t", message: "a quote reopens; whitespace passes through");
+    std\assert(string.control == "", message: "other controls refused");
+}
+
 test "scripts claim their directories as members linted by shellcheck" {
     final claims = discover(["scripts/release.sh", "deploy.bash", "scripts/ci.sh", "web/build.sh"]);
     std\assert(claims.len() == 3, message: "one claim per directory: {claims.len()}");

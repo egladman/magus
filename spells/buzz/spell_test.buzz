@@ -2,6 +2,18 @@ import "std";
 import "magus/spell";
 import "./spell" as buzz;
 
+test "buzz declares ident and string encodings" {
+    final encodings = buzz\mgs_getLanguage().syntax!.encodings;
+    std\assert(encodings.map(fun (i: int, e: Encoding) > str => e.name).join(" ") == "ident string", message: "names");
+    std\assert(encodings[0].pattern == "^[A-Za-z_][A-Za-z0-9_]*$", message: "ASCII name");
+    std\assert(encodings[0].reserved.join(" ").indexOf(" foreach ") != null, message: "foreach refused");
+    final string = encodings[1];
+    std\assert(string.open == "\"" and string.close == "\"", message: "double quotes");
+    final escapes = string.escapes.map(fun (i: int, e: Escape) > str => "{e.text}={e.to}").join(" ");
+    std\assert(escapes == "\\=\\\\ \"=\\\" \{=\\\{ \n=\\n \r=\\r \t=\\t", message: "backslash, quote, open brace, newline, return, tab");
+    std\assert(string.control == "", message: "other controls refused");
+}
+
 test "decisions count match arms and every branching word" {
     final decisions = buzz\mgs_getLanguage().syntax!.decisions!;
     std\assert(decisions.keywords.join(" ") == "if while for foreach and or catch", message: "keywords");
