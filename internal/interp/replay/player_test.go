@@ -336,7 +336,7 @@ func (s *PlayerSuite) TestALogCutAtAnyByteResumesOrRefusesOutcomeUnknown() {
 		s.Require().NoError(os.WriteFile(path, full[:cut], 0o644))
 		_, calls, err := Read(s.dir, "out1")
 		s.Require().NoError(err, "cut at byte %d", cut)
-		s.requirePrefixOf(recorded, calls, cut)
+		s.requireRecordedPrefix(recorded, calls, cut)
 
 		s.ran = map[string]int{}
 		p, runErr := s.replay(mixedScript)
@@ -349,9 +349,9 @@ func (s *PlayerSuite) TestALogCutAtAnyByteResumesOrRefusesOutcomeUnknown() {
 	}
 }
 
-// requirePrefixOf fails unless calls are recorded's first calls, each as recorded or
+// requireRecordedPrefix fails unless calls are recorded's first calls, each as recorded or
 // still open.
-func (s *PlayerSuite) requirePrefixOf(recorded, calls []Call, cut int) {
+func (s *PlayerSuite) requireRecordedPrefix(recorded, calls []Call, cut int) {
 	s.Require().LessOrEqual(len(calls), len(recorded), "cut at byte %d", cut)
 	for i, c := range calls {
 		want := recorded[i]
