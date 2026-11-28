@@ -321,12 +321,27 @@ func graphDirs(ctx context.Context, graph *evidence.Graph, paths []string) func(
 	}
 }
 
-// reportNewDirs prints each directory writes would create, with its
-// neighbours, or why that is unknown. Workspace policy decides whether a fork stops.
-func reportNewDirs(ctx context.Context, root string, writes []string, graph *evidence.Graph) {
-	for _, line := range job.MeasureNewDirs(root, writes, graphDirs(ctx, graph, writes)).Lines() {
+// reportFork prints what a valid top-level fork leaves waiting. For any fork that does
+// not integrate, it prints each directory the write paths would create, or why that is
+// unknown. An integration writes its branches' files. Policy decides what stops.
+func reportFork(ctx context.Context, store *job.Store, root string, row jobtypes.Declaration, valid bool, graph *evidence.Graph) {
+	if len(row.Integrates) > 0 {
+		return
+	}
+	if row.Parent == "" && valid {
+		reportForkFacts(ctx, store, root)
+	}
+	for _, line := range job.MeasureNewDirs(root, row.Paths.Write, graphDirs(ctx, graph, row.Paths.Write)).Lines() {
 		slog.InfoContext(ctx, line, attr.Notice("note"))
 	}
+}
+
+// withGraphFacts is facts with the graph evidence and new-directory measure for writes.
+func withGraphFacts(ctx context.Context, root string, graph *evidence.Graph, writes []string, facts job.TermsFacts) job.TermsFacts {
+	facts.Evidence, facts.GraphCold = evidence.LeaseGraphEvidence(ctx, graph, writes)
+	newDirs := job.MeasureNewDirs(root, writes, graphDirs(ctx, graph, writes))
+	facts.NewDirs = &newDirs
+	return facts
 }
 
 // lsJobs is `magus ls jobs`: every live job this repository carries, whoever holds it.
@@ -494,9 +509,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	graph := newJobGraph(root, false)
 	facts := evidence.LeaseBoundary(ctx, root, store, row, leases, graph, jobEvidenceEnv())
 	waiting.Stop()
-	facts.Evidence, facts.GraphCold = evidence.LeaseGraphEvidence(ctx, graph, row.Paths.Write)
-	newDirs := job.MeasureNewDirs(root, row.Paths.Write, graphDirs(ctx, graph, row.Paths.Write))
-	facts.NewDirs = &newDirs
+	facts = withGraphFacts(ctx, root, graph, row.Paths.Write, facts)
 	tries, err := store.Attempts(ctx)
 	if err != nil {
 		return err
@@ -838,12 +851,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	slog.InfoContext(ctx, fmt.Sprintf("judged %s's postconditions in %s", row.ID, cache.FormatDuration(time.Since(judging))), attr.Notice("note"))
 	releaseSeat()
 	judgedLive := job.NoteForkJudgedAsUpdate(ctx, store, row.ID)
-	if row.Parent == "" && len(row.Integrates) == 0 && len(validation.Problems) == 0 {
-		reportForkFacts(ctx, store, root)
-	}
-	if len(row.Integrates) == 0 {
-		reportNewDirs(ctx, root, row.Paths.Write, graph)
-	}
+	reportFork(ctx, store, root, row, len(validation.Problems) == 0, graph)
 	if globalCfg.DryRun {
 		return forkDryRun(opts, validation)
 	}

@@ -586,15 +586,7 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 		return bindgen.ObjectSession(types.Session{}, ffi.SessionEnums(ctx, sess, "magus")), nil
 	}))
 	m.MapSet("modelTier", function("magus.modelTier", retNull))
-	m.MapSet("magus__Workspace__forkFacts", function("magus.Workspace.forkFacts", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectJobForkFacts(job.ForkFacts{}), nil
-	}))
-	m.MapSet("magus__Workspace__newDirs", function("magus.Workspace.newDirs", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectJobNewDirs(job.NewDirs{Unknown: "a dry run reads no knowledge graph"}), nil
-	}))
-	m.MapSet("magus__Workspace__unmerged", function("magus.Workspace.unmerged", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return bindgen.ObjectJobUnmergedReport(job.UnmergedReport{}), nil
-	}))
+	stubForkReads(m)
 	m.MapSet("magus__Workspace__unverified", function("magus.Workspace.unverified", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectUnverifiedReport(types.UnverifiedReport{Unknown: "a dry run reads no recorded runs"}), nil
 	}))
@@ -1236,4 +1228,18 @@ func secretGrantStubArg(method string, args []vm.Value) error {
 		return fmt.Errorf(`magus\secret.%s: %w`, method, types.WrapDiagnostic(types.SecretGrantInvalid, err, "%s", err.Error()))
 	}
 	return nil
+}
+
+// stubForkReads sets the Workspace reads a fork rule makes. Each answers what a dry
+// run cannot know, and the new-directory measure says so as unknown.
+func stubForkReads(m vm.Value) {
+	m.MapSet("magus__Workspace__forkFacts", function("magus.Workspace.forkFacts", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return bindgen.ObjectJobForkFacts(job.ForkFacts{}), nil
+	}))
+	m.MapSet("magus__Workspace__newDirs", function("magus.Workspace.newDirs", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return bindgen.ObjectJobNewDirs(job.NewDirs{Unknown: "a dry run reads no knowledge graph"}), nil
+	}))
+	m.MapSet("magus__Workspace__unmerged", function("magus.Workspace.unmerged", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return bindgen.ObjectJobUnmergedReport(job.UnmergedReport{}), nil
+	}))
 }
