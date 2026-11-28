@@ -67,7 +67,7 @@ checkout:
     - [GOEXPERIMENT=jsonv2, go, -C, "{checkout}", build, -trimpath, -o, magus, ./cmd/magus]
     - ["{checkout}/magus", buzz, -C, "{checkout}", hack/dev/stamp-binary.buzz]
     - ["{checkout}/magus", buzz, -C, "{checkout}", hack/dev/bootstrap-checkout.buzz]
-  rebuild_fallback:
+  rebuild_uncached:
     - [GOEXPERIMENT=jsonv2, go, -C, "{checkout}", run, -trimpath, ./cmd/magus, run, go-build, --no-cache, .]
 ```
 
@@ -79,10 +79,10 @@ no flag, no toolchain and no step name.
 
 `rebuild` is the standard repair and never skips a cache. `--no-cache` skips magus's own
 target cache, so it is the fallback for a cache that is suspect. The fallback is a
-second declared list, and every remedy prints it after the standard lines, named as the
-line to run if they fail. That is simpler than a line named only after a failure: the
-guard keeps no record of what ran, and a line it exempts must be declared either way.
-The second key's name is Eli's pick (Open questions).
+second declared list, `rebuild_uncached`, named for what it does. Every remedy prints it
+after the standard lines, named as the line to run if they fail. That is simpler than a
+line named only after a failure: the guard keeps no record of what ran, and a line it
+exempts must be declared either way.
 
 Three things in these lines are deliberate:
 
@@ -248,8 +248,6 @@ The build cannot merge in parts without leaving two mechanisms.
 
 ## Open questions
 
-- The fallback key's name. Options: `rebuild_fallback`, `rebuild_clean`. Neither exists
-  in `config.Checkout`.
 - `LoadCheckout(root)` names a root, and the guard needs the bytes at HEAD or at an
   authority. The door that hands committed bytes to the same decoder is not named.
 - Whether link, stamp and ready equal today's bootstrap and ready on a fresh checkout.
