@@ -9,7 +9,7 @@ import (
 )
 
 // format is the format a replay log's header names on its first line.
-const format ="magus.replay/v1alpha1"
+const format = "magus.replay/v1alpha1"
 
 // callEnd is how a recorded call ended. A call with no end line on disk reads
 // back as [callOpen]. Its process died inside it, so its effect is unknown.

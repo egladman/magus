@@ -2,7 +2,6 @@ package replay
 
 import (
 	"strings"
-
 )
 
 // liveModules name state in the process that made them: a handle table, an open file
