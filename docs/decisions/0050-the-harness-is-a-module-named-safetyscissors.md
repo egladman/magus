@@ -1,7 +1,7 @@
 ---
 title: "ADR 0050: the harness is a module named safetyscissors"
 order: 50
-description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. Steps 1 to 4, 6 and 7, the budget, the verdict and step types, the tier set, the JSON Lines helpers, the session store and the secrets module, are built, and so are step 5's trail event and readers and step 8's job types."
+description: "magus's harness layer becomes its own Go module, safetyscissors. The layer is guard verdicts, job leases and goal grading, the trail, sessions, the sandbox policy, the build budget and the model tier table. A Go program imports it with no magusfile, no magus.yaml, no magus binary, no workspace and no version control. It stays in the magus repository as a nested module, and magus becomes its first client. The name says what the library is for: the tool still works, and you cannot hurt yourself with it, whoever is holding it. It ships no agent loop, no model client and no router. Steps 1 to 4, 6 and 7, the budget, the verdict and step types, the tier set, the JSON Lines helpers, the session store and the secrets module, are built, and so are step 5's trail event and readers and step 8's job types. Since 2026-11-28 the module ships building blocks only, and `access` judges who may act by attribute rules."
 tags: [adr, decision, sdk, harness, guard, jobs, module]
 status: proposed
 date: 2026-11-15
@@ -115,9 +115,10 @@ each with one job:
 | Package   | Holds                                                                                                            |
 | --------- | ---------------------------------------------------------------------------------------------------------------- |
 | `verdict` | `Decision`, `Verdict`, `Judgment`, the stricter-of merge, `DeniedError`                                          |
-| `step`    | the step and its declared rows (ADR 0046), `Rule`, `Table`, `(Table).Judge`                                      |
+| `step`    | the step, its declared rows (ADR 0046) and the request a step rule reads, as data; it judges nothing             |
+| `access`  | attribute rules over who may do what to which target: `Request`, `Rule`, `RuleSet`, `Scope`, `(RuleSet).Judge`   |
 | `job`     | the job store opened on a directory, `Job`, write paths, goals, fork, exit, grade, `Covers`                      |
-| `trail`   | append-only events: read through the package, written only by the module's own packages                          |
+| `journal` | append-only events: read through the package, written only by the module's own packages                          |
 | `session` | session ids and their append-only records                                                                        |
 | `sandbox` | read, write and exec policy, narrowed to a lease                                                                 |
 | `budget`  | the slot limiter, machine claims and their memory curves, and a spend limit priced from rows the caller supplies |
@@ -139,10 +140,11 @@ made a package boundary; decided 2026-11-16 by the build, Eli to confirm.
 The Buzz-facing names stay as they are: a magusfile reads the same bindings after each
 step, and only Go spellings move; decided 2026-11-16 by the build, Eli to confirm.
 
-### 2. It runs with nothing but a directory
+### 2. It needs no workspace
 
 - A caller opens every store on a directory it names. Nothing resolves a repository
-  identity, a user state directory or a working directory on its own.
+  identity, a user state directory or a working directory on its own. The work the
+  stores record need not be files.
 - Nothing reads the environment or writes to stdout or stderr. Each of those is an option
   the caller passes.
 - Nothing is process-global. The grader `SetCheckGrader` sets today becomes an option on
@@ -158,9 +160,10 @@ step, and only Go spellings move; decided 2026-11-16 by the build, Eli to confir
   `<`, `>` and `&` unescaped, the bytes magus's v2 codec writes; decided 2026-11-16 by the build, Eli to confirm.
 - No VCS is required. A grade that needs to know what changed takes it from an observer
   the caller supplies; magus's observer reads VCS.
-- A step table with no rule is a construction error. The guard passing `rm -rf /` in an
-  empty directory today is a silent default; this replaces it with a refusal that names
-  what is missing.
+- Nothing answers yes by default. An `access` rule set denies an act no scope declared,
+  and an act no permit holds for. The guard passing `rm -rf /` in an empty directory on
+  2026-11-15 was a silent default. Step rules are magus's: its guard refuses a declared
+  step kind no rule would judge (`StepTable.CheckJudged`, `internal/guard/step.go`).
 
 ### 3. Policy is declared rows plus Go rule functions
 
@@ -169,19 +172,18 @@ This exposes the shape ADR 0046 built (`WithStepSpecs`, `WithStepRule`, the step
 - Rows declare each kind as data.
 - A rule is a Go function from a request to a verdict.
 - Buzz stays magus's own way of writing policy. magus adapts each Buzz rule into a
-  `step.Rule`, the shape `steps.Rule` already has (`internal/guard/steps/steps.go:16`).
+  `guard.StepRule`, the shape `steps.Rule` already has (`internal/guard/steps/steps.go:16`).
 
-Every built-in rule ships in the module, and none applies by default. A caller opts in
-by passing each rule, or a named group of them, as an option to the table. A rule that
-reads magus's world (worktrees, `magus run` routing, approved sources, the magusfile)
-takes what it reads from a seam the caller supplies, and the table refuses to build
-when the rule is passed without it. An empty table is still a construction error
-(part 2), so opting in to nothing fails loudly instead of allowing everything.
-`AllRules()` makes "everything" a call the caller writes, never what nil means.
+The step rule table and its judge are magus's, not the module's: `guard.StepRule`,
+`guard.StepTable` and `JudgeStep` in `internal/guard/step.go`. They need a JSON Schema
+library (`google/jsonschema-go`), which part 2 keeps out of the module, and their
+built-ins are coding rules. The module's `step` holds the step as data and judges
+nothing. Who may act is the module's `access` (2026-11-28 amendment).
 
-The shape is `go/analysis` with `multichecker.Main`. Every analyzer ships as a value,
-none runs unless the program passes it, and a group is a plain slice. `crypto/tls` and
-`crypto/x509` fit worse, because nil there means defaults the library picks.
+As proposed on 2026-11-15 and not built, each built-in would become a value a caller
+passes, none applied by default, in the shape of `go/analysis` with `multichecker.Main`.
+`crypto/tls` and `crypto/x509` fit worse, because nil there means defaults the library
+picks. That proposal now applies to magus's guard, not to the module.
 
 Today the 137 rules (99 deny, 31 advise, 7 off; `./magus describe rule`) are inline arms
 in `evaluateLine` (`internal/guard/shell.go:2758`) and `Judge`, so each becomes a value
@@ -210,8 +212,8 @@ first. Sorted by what they read, as proposed on 2026-11-15 and not traced rule b
 
 ### 5. magus is the first client
 
-`judge.go` builds a `step.Table` and registers magus's built-ins and Buzz adapters as
-rules. `internal/job` keeps worktrees, checkouts, landings, merges, plans and outcomes on
+`Open` (`magus.go`) builds a `guard.StepTable` from the caller's step specs and Go step
+rules; the built-ins still run inline in the guard. `internal/job` keeps worktrees, checkouts, landings, merges, plans and outcomes on
 top of the module's job store. `vcs.StateDir` computes the directory magus passes to
 `job.Open`. The CLI, the hooks, `magus agent install`, the MCP server and the
 workspace's rules stay in magus. The module never imports magus.
@@ -281,7 +283,7 @@ Each step merges on its own and leaves magus green. Eli approved building every 
 | 7    | secrets into their own module, `libs/secrets`, from `internal/secret` and types/secret.go                                                       | ~1,300 lines                  | no                                                                                                                                     | done                       |
 | 8    | the job types out of `types`, with no alias, and the generated Buzz mirrors regenerated                                                         | ~5,000 lines                  | yes: 16+ importers                                                                                                                     | in progress (mirrors owed) |
 | 9    | the `job` store core, with config as `Limits`, VCS as a directory, env and stderr as options                                                    | ~8,000-10,000 of 23,431 lines | no: `jobs.jsonl` stays where `vcs.StateDir` puts it, and magus passes that directory (decided 2026-11-16 by the build, Eli to confirm) | done                       |
-| 10   | the guard engine: the step table and settings, with magus's 137 built-ins registered as rules                                                   | the largest                   | yes: `Judge`'s structure changes                                                                                                       | planned                    |
+| 10   | nothing moves: the step table stays in magus's guard (`internal/guard/step.go`), and magus's guard calls `access` for who may act              | not measured                  | yes: `Judge`'s structure changes                                                                                                       | not built (2026-11-28)     |
 | 11   | `sandbox`, after step 9, with its own grant type replacing `spells.Sandbox`                                                                     | ~2,800 lines                  | no                                                                                                                                     | done                       |
 
 Sizes are estimates from the line counts above, not measured diffs.
@@ -382,7 +384,8 @@ The agent section left `types/agent`, which is gone. The Buzz names stay through
   every package moves code that exists. The three interfaces each have a second
   implementation today, and repository identity is a string, not an interface.
 - [No silent defaults](../design/judgment/no-silent-defaults.md): the empty-directory
-  pass on `rm -rf /` is the defect part 2 removes. An empty table is a construction error.
+  pass on `rm -rf /` is the defect part 2 removes. An `access` rule set denies what no
+  permit covers, and nothing in the module answers yes.
 - [Everything is a file](../design/principles/everything-is-a-file.md): every store stays
   append-only JSON Lines on a directory the caller names.
 - [A refusal carries its reason](../design/judgment/a-refusal-carries-its-reason.md) and
@@ -473,8 +476,9 @@ What would reopen it: a collision appearing before the first tag.
 - The job store's directory comes from the caller. Rows stay under
   `$XDG_STATE_HOME/magus/jobs`, where `vcs.StateDir` puts them, and magus passes that
   directory; decided 2026-11-16 by the build, Eli to confirm.
-- The module is tagged as `<module path>/vX.Y.Z`, as the other nested modules are, and
-  gets its own Go API lock.
+- The module is tagged as `<module path>/vX.Y.Z`, as the other nested modules are. It
+  has no Go API lock of its own yet; one comes before any package is split (2026-11-28
+  amendment).
 - [The Go SDK reference](../reference/go-sdk.md) changes its "the harness is CLI-only"
   line once step 10 merges.
 - `internal/agent/harness` keeps its name. It is magus's host test driver and never
@@ -550,6 +554,57 @@ decided.
   string is still to pick.
 
 ## Amendments
+
+### 2026-11-28: building blocks only, and authority is attribute rules
+
+Eli ruled these on 2026-11-27 and 2026-11-28. The body above is corrected where it
+contradicted them: part 1's table, parts 2, 3 and 5, step 10, and the Consequences.
+
+- The module ships building blocks and nothing else. A building block is a value type,
+  a pure decision over values the caller passes, or a record the module itself appends
+  when its own calls are made. It does nothing until called and blocks only inside that
+  call, until the caller's context ends. It starts no background work and runs no
+  program the caller did not hand it. It calls no model. Its exported names read true
+  for work that is not code. A caller who left it out would have to write the same thing
+  and would likely get it wrong, and its tests show one use that is not code. A built
+  package for bounding work that continues across turns was closed for failing this.
+- Authority is attribute rules, in `access`: a `Request[P, T, D]` of principal, target
+  and detail, a `Rule` built with `Permit` or `Forbid`, a `Scope` of acts and rules, a
+  `RuleSet` that joins scopes, and `(RuleSet).Judge`. The module has no role type; a
+  role is one attribute magus puts on its own principal. A declared act with no permit
+  that holds is denied, a forbid beats a permit, and nothing answers yes. A later scope
+  may permit only the acts it declared and may forbid any.
+- `step` and `access` are two ideas, and both stay. Access answers whether this party
+  may do this kind of act to this target, and denies when no permit holds. A step rule
+  answers whether anything objects to this one operation as written, and leaves it to
+  the host when nothing does. `step` holds the step as data. The step rule table and its
+  judge are magus's guard (part 3).
+- The boundary: the module's core assumes no file system and nothing about code.
+  Packages about a domain, such as path claims and the sandbox, may stay as leaves that
+  name their domain, and the root package imports no leaf.
+- Part 2's "it runs with nothing but a directory" no longer describes what the module
+  assumes about the work it records. Every store still opens on a directory the caller
+  names. Whether the stores must stop assuming a directory is not ruled.
+- The module gets a Go API lock of its own before any package is split, so each cut
+  records its break.
+
+| Decision                         | Evidence                                                                                                          | State     |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------- |
+| building blocks only             | `libs/safetyscissors/access/example_test.go` judges invoice payments                                              | done      |
+| attribute rules in `access`      | `libs/safetyscissors/access/rule.go`, `libs/safetyscissors/access/access.go`                                      | done      |
+| `step` holds data, judges none   | `libs/safetyscissors/step/step.go`; `StepRule`, `StepTable` and `JudgeStep` in `internal/guard/step.go`           | done      |
+| magus's guard calls `access`     | nothing outside `libs/safetyscissors/access` imports it                                                           | not built |
+| `job` assumes no checkout        | `job.Job` carries `CheckoutRoot` and a `Worktree` with its checkout and branch (`libs/safetyscissors/job/job.go`) | not built |
+| the root imports no leaf         | the root imports `sandbox` and `budget` (`libs/safetyscissors/options.go`)                                        | not built |
+| `sandbox` is a leaf              | `sandbox` imports `job` (`libs/safetyscissors/sandbox/lease.go`)                                                  | not built |
+| stores open on a named directory | `safetyscissors.New` takes `Config.Dir` (`libs/safetyscissors/options.go`)                                        | done      |
+| the module's own API lock        | `internal/commands/testdata/api-go.lock` locks magus's packages and no package of the module                      | not built |
+
+Principles checked: [What we do not build is the product](../design/principles/what-we-do-not-build.md)
+is the building-block test. [No silent defaults](../design/judgment/no-silent-defaults.md)
+is why `access` denies an undeclared act and an unpermitted one rather than answering
+yes. [A harness is not an agent thing](../design/principles/a-harness-is-not-an-agent-thing.md)
+is why each block's names and tests must hold for work that is not code.
 
 ### 2026-11-18: a goal is a postcondition
 
@@ -629,6 +684,7 @@ against its parent's model tier. buzzed, the first consumer outside magus, impor
   `job.Covers` and `verdict.Deny`. Every subpackage stays importable on its own.
 - No `Judge` and no `Close`. A judge with no rule table would answer the default allow
   part 7 refuses; it comes with step 10. Nothing here holds a descriptor to close.
+  Superseded on 2026-11-28: step 10 is not built, and `access` holds the module's judge.
 
 Principles checked: [No silent defaults](../design/judgment/no-silent-defaults.md) is why
 an absent part answers with the option to pass and never with `nil, nil` or an unlimited
