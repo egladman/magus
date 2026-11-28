@@ -76,13 +76,13 @@ test "a line measures each writing fork's paths, a child included, and reads cre
         return fewCounts();
     };
     final child = helpers\Program{ name = "magus", args = ["job", "fork", "kid", "--parent", "next", "--write-paths", "internal/hostcall/a.go,internal/hostcall/b.go"], repeats = false };
-    final refused = spawn\judgeForks([child], line: "", read: noFile, facts: counts, limit: 10, dirs: measure);
+    final refused = spawn\decideForkLine([child], line: "", read: noFile, facts: counts, limit: 10, dirs: measure);
     std\assert(refused.decision == magus\GuardDecision.deny, message: refused.reason);
     std\assert(seen.len() == 1 and seen[0] == "internal/hostcall/a.go,internal/hostcall/b.go", message: seen.join(" | "));
 
     final record = "\{\"id\":\"next\",\"paths\":\{\"write\":[\"internal/hostcall/a.go\"]\},\"creates\":[\"internal/hostcall\"]\}";
     final stdin = helpers\Program{ name = "magus", args = ["job", "fork", "--stdin"], repeats = false };
-    final named = spawn\judgeForks([stdin], line: "./magus job fork --stdin <<'EOF'\n{record}\nEOF", read: noFile, facts: counts, limit: 10, dirs: measure);
+    final named = spawn\decideForkLine([stdin], line: "./magus job fork --stdin <<'EOF'\n{record}\nEOF", read: noFile, facts: counts, limit: 10, dirs: measure);
     std\assert(named.decision == magus\GuardDecision.advise, message: named.reason);
 }
 
@@ -95,17 +95,8 @@ test "a read-only or integrating fork is not measured" {
         return fewCounts();
     };
     final readOnly = helpers\Program{ name = "magus", args = ["job", "fork", "look", "--read-only"], repeats = false };
-    std\assert(spawn\judgeForks([readOnly], line: "", read: noFile, facts: counts, limit: 10, dirs: measure).decision == magus\GuardDecision.defer, message: "read-only");
+    std\assert(spawn\decideForkLine([readOnly], line: "", read: noFile, facts: counts, limit: 10, dirs: measure).decision == magus\GuardDecision.defer, message: "read-only");
     final record = "\{\"id\":\"land\",\"integrates\":[\"done-0\"],\"paths\":\{\"write\":[\"internal/hostcall/a.go\"]\}\}";
     final stdin = helpers\Program{ name = "magus", args = ["job", "fork", "--stdin"], repeats = false };
-    std\assert(spawn\judgeForks([stdin], line: "./magus job fork --stdin <<'EOF'\n{record}\nEOF", read: noFile, facts: counts, limit: 10, dirs: measure).decision == magus\GuardDecision.defer, message: "integrates");
-}
-
-test "decideForkLine notes a writing fork as unmeasured rather than passing it silently" {
-    final counts = fun () > spawn\ForkCounts {
-        return fewCounts();
-    };
-    final fork = helpers\Program{ name = "magus", args = ["job", "fork", "next", "--write-paths", "internal/hostcall/a.go"], repeats = false };
-    final v = spawn\decideForkLine([fork], line: "", read: noFile, facts: counts, limit: 10);
-    std\assert(v.decision == magus\GuardDecision.advise and v.reason.indexOf("new directories: unknown") != null, message: v.reason);
+    std\assert(spawn\decideForkLine([stdin], line: "./magus job fork --stdin <<'EOF'\n{record}\nEOF", read: noFile, facts: counts, limit: 10, dirs: measure).decision == magus\GuardDecision.defer, message: "integrates");
 }

@@ -158,7 +158,66 @@ fun forkVerdict(req: CommandRequest, programs: [helpers\Program]) > GuardVerdict
     final facts = fun () > spawn\ForkCounts {
         return forkCounts(req.workspace);
     };
-    return spawn\decideForkLine(programs, line: req.command, read: read, facts: facts, limit: spawn\finishedBranchLimit);
+    final dirs = fun (writes: [str]) > spawn\ForkDirs {
+        return forkDirs(req.workspace, writes: writes);
+    };
+    return spawn\decideForkLine(programs, line: req.command, read: read, facts: facts, limit: spawn\finishedBranchLimit, dirs: dirs);
+}
+
+// forkDirs is magus\workspace().newDirs() for the fork rule. A failed read is an
+// unknown measure, which refuses nothing.
+fun forkDirs(workspace: str, writes: [str]) > spawn\ForkDirs {
+    try {
+        return dirsFrom(magus\workspace(workspace).newDirs(writes));
+    } catch (e) {
+        return spawn\ForkDirs{ unknown = errorText(e) };
+    }
+}
+
+fun dirsFrom(measured: NewDirs) > spawn\ForkDirs {
+    final dirs = measured.dirs.map(fun (index: int, d: NewDir) > spawn\ForkDir => spawn\ForkDir{ dir = d.dir, neighbors = d.neighbors });
+    return spawn\ForkDirs{ dirs = dirs, unknown = measured.unknown };
+}
+
+fun forkProgram(args: [str]) > helpers\Program {
+    return helpers\Program{ name = "magus", args = ["job", "fork"] + args, repeats = false };
+}
+
+fun noCounts() > spawn\ForkCounts {
+    return spawn\ForkCounts{};
+}
+
+fun judgedFork(args: [str], measured: NewDirs) > GuardVerdict {
+    final dirs = fun (writes: [str]) > spawn\ForkDirs {
+        return dirsFrom(measured);
+    };
+    final read = fun (path: str) > str {
+        return "";
+    };
+    return spawn\decideForkLine([forkProgram(args)], line: "", read: read, facts: noCounts, limit: spawn\finishedBranchLimit, dirs: dirs);
+}
+
+test "a fork creating an unlisted package is denied, a listed one passes, and docs or an unknown measure are advised" {
+    final hostcall = NewDirs{ dirs = [NewDir{ dir = "internal/hostcall", neighbors = ["internal/host"] }] };
+    final writes = ["next", "--write-paths", "internal/hostcall/call.go"];
+    final denied = judgedFork(writes, measured: hostcall);
+    std\assert(denied.decision == magus\GuardDecision.deny, message: denied.reason);
+    foreach (want in ["this fork creates a package no one picked: internal/hostcall has no dir node", "directories that already hold these words: internal/host", "`\"creates\": [\"internal/hostcall\"]`"]) {
+        std\assert(denied.reason.indexOf(want) != null, message: "{want} in {denied.reason}");
+    }
+    final record = "\{\"id\":\"next\",\"paths\":\{\"write\":[\"internal/hostcall/call.go\"]\},\"creates\":[\"internal/hostcall\"]\}";
+    final read = fun (path: str) > str {
+        return "";
+    };
+    final dirs = fun (w: [str]) > spawn\ForkDirs {
+        return dirsFrom(hostcall);
+    };
+    final listed = spawn\decideForkLine([forkProgram(["--stdin"])], line: "./magus job fork --stdin <<'EOF'\n{record}\nEOF", read: read, facts: noCounts, limit: spawn\finishedBranchLimit, dirs: dirs);
+    std\assert(listed.decision != magus\GuardDecision.deny, message: listed.reason);
+    final docs = judgedFork(["next", "--write-paths", "docs/fresh/a.md"], measured: NewDirs{ dirs = [NewDir{ dir = "docs/fresh" }] });
+    std\assert(docs.decision == magus\GuardDecision.advise, message: docs.reason);
+    final unknown = judgedFork(writes, measured: NewDirs{ unknown = "the knowledge graph would not load" });
+    std\assert(unknown.decision == magus\GuardDecision.advise and unknown.reason.indexOf("new directories: unknown, the knowledge graph would not load") != null, message: unknown.reason);
 }
 
 // forkCounts is magus\workspace().forkFacts() for the fork rule.
