@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // TestSplitVCSVerb pins that the subcommand is found past a leading flag. Reading args[0]
@@ -36,4 +41,30 @@ func TestSplitVCSVerb(t *testing.T) {
 			assert.Equal(t, tt.wantRest, rest)
 		})
 	}
+}
+
+type ConcludeMergeSuite struct {
+	suite.Suite
+}
+
+func TestConcludeMergeSuite(t *testing.T) { suite.Run(t, new(ConcludeMergeSuite)) }
+
+func (s *ConcludeMergeSuite) line(name string) string {
+	enabled := true
+	res, err := vcs.Resolve(context.Background(), "", "", types.VCSOptions{Name: name, Enabled: &enabled})
+	s.Require().NoError(err)
+	s.Require().NotNil(res.VCS)
+	return concludeMergeLine(res.VCS)
+}
+
+func (s *ConcludeMergeSuite) TestGitNamesMergeContinue() {
+	s.Equal("conclude it with `git merge --continue`", s.line("git"))
+}
+
+func (s *ConcludeMergeSuite) TestHgConcludesWithACommit() {
+	s.Equal("conclude it with a hg commit", s.line("hg"))
+}
+
+func (s *ConcludeMergeSuite) TestJJHasNothingToConclude() {
+	s.Equal("jj recorded the merge in the working-copy commit; nothing is left to conclude", s.line("jj"))
 }

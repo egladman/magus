@@ -256,7 +256,7 @@ func vcsResolveCommand(ctx context.Context, root string, rc runConfig, args []st
 	}
 	if len(conflicts) == 0 {
 		if rf.Against != "" {
-			fmt.Printf("vcs resolve: %s merged with no conflicts; conclude it with `git commit`\n", rf.Against)
+			fmt.Printf("vcs resolve: %s merged with no conflicts; %s\n", rf.Against, concludeMergeLine(res.VCS))
 			return nil
 		}
 		if globalCfg.DryRun {
@@ -289,6 +289,22 @@ func vcsResolveCommand(ctx context.Context, root string, rc runConfig, args []st
 		return settle.UnresolvedError(plan)
 	}
 	return settle.Apply(ctx, os.Stdout, m, res.VCS, plan, func(args []string) error { return runTarget(ctx, root, rc, args) }, stale)
+}
+
+// concludeMergeLine says how id's backend concludes a merge that stopped clean. hg
+// lists no merge continue because `hg commit` concludes it, and jj's merge is
+// already the working-copy commit.
+func concludeMergeLine(id types.VCSIdentity) string {
+	cmds, stops := id.OperationCommands()
+	if !stops {
+		return id.Name() + " recorded the merge in the working-copy commit; nothing is left to conclude"
+	}
+	for _, oc := range cmds {
+		if oc.Op == types.OperationMerge && oc.Step == types.OperationContinue {
+			return fmt.Sprintf("conclude it with `%s`", strings.Join(oc.Argv, " "))
+		}
+	}
+	return fmt.Sprintf("conclude it with a %s commit", id.Name())
 }
 
 // settleLockWait bounds how long a settle waits for another magus to release a
