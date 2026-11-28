@@ -213,7 +213,7 @@ func RangeOwes(ctx context.Context, drv types.RangeReporter, dir, base, head str
 	owed := RangeOwed{Base: base, Head: head}
 	changed, err := drv.RangeFiles(ctx, dir, base, head, nil)
 	if err != nil {
-		return owed, fmt.Errorf("read the range %s..%s: %w", base, head, err)
+		return owed, fmt.Errorf("read the range %s..%s (if %s is not this repository's base, set vcs.base_ref in magus.yaml or MAGUS_VCS_BASE_REF): %w", base, head, base, err)
 	}
 	if len(changed) == 0 {
 		return owed, nil
