@@ -718,6 +718,48 @@ func (s *BuzzRecordSuite) TestAChangedImportRefusesTheRerunNamingTheFile() {
 	s.NoError(err, "--restart is the remedy")
 }
 
+func (s *BuzzRecordSuite) shownCalls(script string) string {
+	dir, ref := s.place(script)
+	var b strings.Builder
+	writeRecordedCalls(&b, dir, ref)
+	return b.String()
+}
+
+func (s *BuzzRecordSuite) TestQueryOutputShowsAStoppedRunsCallsWithTheOpenOneMarked() {
+	_, err := s.run(&probe{step: "math.step", dieAt: 2}, stepScript, interp.ScriptOptions{})
+	s.Require().Error(err)
+
+	dir, ref := s.place(stepScript)
+	s.Equal(fmt.Sprintf("\ncalls: 2 recorded for probe.buzz, the last 2 shown; all of them are in %s\n",
+		filepath.Join(dir, ref, "calls.jsonl"))+
+		"  #0     math.step                    returned\n"+
+		"  #1     math.step                    open  <- the run stopped inside this call\n",
+		s.shownCalls(stepScript))
+}
+
+func (s *BuzzRecordSuite) TestQueryOutputShowsOnlyTheLastCallsOfALongRun() {
+	const script = `import "probe";
+fun main() > void {
+    var i = 0;
+    while (i < 25) { _ = probe\step(i); i = i + 1; }
+}
+`
+	_, err := s.run(&probe{step: "math.step", dieAt: -1}, script, interp.ScriptOptions{})
+	s.Require().NoError(err)
+
+	out := s.shownCalls(script)
+	s.Contains(out, "calls: 25 recorded for probe.buzz, the last 20 shown; all of them are in ")
+	s.NotContains(out, "#4 ", "the first calls are left to the log")
+	s.Contains(out, "#5 ")
+	s.Contains(out, "#24 ")
+}
+
+func (s *BuzzRecordSuite) TestOnlyARecordedBuzzRunKeepsCalls() {
+	s.True(recordsCalls("buzz hack/dev/land.buzz"))
+	s.False(recordsCalls("buzz -t hack/dev/land.buzz"), "a test run keeps no log")
+	s.False(recordsCalls("build"))
+}
+
 func (s *BuzzRecordSuite) TestAnUnchangedImportResumes() {
 	s.importing(`export final lib = 1;`)
 	_, err := s.run(&probe{step: "math.step", dieAt: 2}, importingStepScript, interp.ScriptOptions{})
