@@ -143,8 +143,8 @@ func TestParityRangeOwesAnInputWithoutItsOutput(t *testing.T) {
 
 		owed, err := RangeOwes(t.Context(), b.drv, dir, base, head, apiRoles, everyProjectGenerates)
 		require.NoErrorf(t, err, "%s RangeOwes", b.name)
-		assert.Equalf(t, []string{"api"}, owed.Projects, "%s", b.name)
-		assert.Equalf(t, changed, owed.Last, "%s: the fold rewrites the commit that changed the input", b.name)
+		assert.Equalf(t, RangeOwed{Base: base, Head: head, Projects: []string{"api"}, Last: changed}, owed,
+			"%s: the fold rewrites the commit that changed the input", b.name)
 	})
 }
 
@@ -159,8 +159,7 @@ func TestParityRangeOwesNothingOnceTheOutputMoves(t *testing.T) {
 
 		owed, err := RangeOwes(t.Context(), b.drv, dir, base, head, apiRoles, everyProjectGenerates)
 		require.NoErrorf(t, err, "%s RangeOwes", b.name)
-		assert.Emptyf(t, owed.Projects, "%s", b.name)
-		assert.Emptyf(t, owed.Last, "%s", b.name)
+		assert.Equalf(t, RangeOwed{Base: base, Head: head}, owed, "%s", b.name)
 	})
 }
 
@@ -187,5 +186,18 @@ func TestParityRangeOwesRefusesAnUnreadableRange(t *testing.T) {
 
 		_, err := RangeOwes(t.Context(), b.drv, dir, base, "no-such-revision", apiRoles, everyProjectGenerates)
 		assert.Errorf(t, err, "%s", b.name)
+	})
+}
+
+// A base the repository lacks names the setting that declares the right one.
+func TestParityRangeOwesNamesTheBaseSetting(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"README": "r\n"})
+		head := initialCommitID(t, b, dir)
+
+		_, err := RangeOwes(t.Context(), b.drv, dir, "no-such-base", head, apiRoles, everyProjectGenerates)
+		require.Errorf(t, err, "%s", b.name)
+		assert.Containsf(t, err.Error(), "set vcs.base_ref in magus.yaml or MAGUS_VCS_BASE_REF", "%s", b.name)
 	})
 }
