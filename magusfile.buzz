@@ -2820,10 +2820,21 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // generate writes MAGUS.md and the *.lock fixtures this suite reads; without the
     // edge, coverage-render's parallel needs(generate, test) is MGS4008 at doctor time.
     ctx.needs(generate);
-    ctx.needs(advice_test, cli_test);
+    // A failed need throws at its needs call. Each is caught so the raced run below still
+    // happens, and one message at the end names every part that failed.
+    final failed: mut [str] = mut [];
+    try {
+        ctx.needs(advice_test, cli_test);
+    } catch (e) {
+        failed.append("advice-test/cli-test: {e}");
+    }
     // extended adds the tests that need a C toolchain and a docker daemon.
     if (ctx.hasCharm("extended")) {
-        ctx.needs(compress_cgo_test, completion_test);
+        try {
+            ctx.needs(compress_cgo_test, completion_test);
+        } catch (e) {
+            failed.append("compress-cgo-test/completion-test: {e}");
+        }
     }
     // Declared so coverage_render finds the profiles after a cache hit.
     // A glob: a narrowed run writes only keyed profiles.
@@ -2854,13 +2865,26 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                     "console/src/apps/graph/main.ts", "console/src/apps/graph/shapes.ts"]);
     ctx.readsFiles(["MAGUS.md"]);
     // The guard's pull-request-text test runs the binary proofread-build links.
-    ctx.needs(buzz_test, proofreadlib\proofread_build);
+    try {
+        ctx.needs(buzz_test, proofreadlib\proofread_build);
+    } catch (e) {
+        failed.append("buzz-test/proofread-build: {e}");
+    }
     // Explicit args replace go-test's `./...` default and the `-- -run` passthrough, hence
     // `args`.
     final raced = raced_packages();
     if (raced.error != null) { throw raced.error!.message; }
-    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-race", "-covermode=atomic", "-coverprofile=" + cov\profilePath(COVERAGE_PROFILE, args: args)] + raced.value! + args});
+    try {
+        go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
+            {"args": ["-race", "-covermode=atomic", "-coverprofile=" + cov\profilePath(COVERAGE_PROFILE, args: args)] + raced.value! + args});
+    } catch (e) {
+        failed.append("raced go-test: {e}");
+    }
+    // A failed part can leave a missing or partial profile, and settling it would hide the
+    // failure behind a coverage error.
+    if (failed.len() > 0) {
+        throw "test failed in {failed.len()} part(s): " + failed.join("; ");
+    }
     final settled = cov\settle(cov\Profiles{ whole = COVERAGE_PROFILE, cmd = CMD_MAGUS_PROFILE, hand = COVERAGE_HAND_PROFILE,
         every = ".magus/coverage*.out" }, args: args, gomod: fs\readFile("go.mod"));
     if (settled.error != null) {
