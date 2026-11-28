@@ -98,6 +98,8 @@ const (
 	FlagBuzzProfile = "profile"
 	// buzz: --record
 	FlagBuzzRecord = "record"
+	// buzz: --restart
+	FlagBuzzRestart = "restart"
 	// buzz: --t
 	FlagBuzzT = "t"
 	// buzz: --test
@@ -2161,6 +2163,7 @@ type BuzzFlags struct {
 	Coverprofile string // --coverprofile
 	Profile      bool   // --[no-]profile
 	Record       bool   // --[no-]record
+	Restart      bool   // --[no-]restart
 	Embedded     bool   // --[no-]embedded
 	Autoload     bool   // --[no-]autoload
 	C            string // -C
@@ -2180,6 +2183,8 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	command.NegatedBoolVar(fs, &f.Profile, FlagBuzzProfile)
 	fs.BoolVar(&f.Record, FlagBuzzRecord, false, "Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (`magus query output <ref>` reopens it)")
 	command.NegatedBoolVar(fs, &f.Record, FlagBuzzRecord)
+	fs.BoolVar(&f.Restart, FlagBuzzRestart, false, "With --record, discard the replay log of this run and start from the top, instead of resuming a run that died")
+	command.NegatedBoolVar(fs, &f.Restart, FlagBuzzRestart)
 	fs.BoolVar(&f.Embedded, FlagBuzzEmbedded, false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
 	command.NegatedBoolVar(fs, &f.Embedded, FlagBuzzEmbedded)
 	fs.BoolVar(&f.Autoload, FlagBuzzAutoload, true, "Execute the magusfile when the REPL starts; --no-autoload starts without it")

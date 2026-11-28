@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -20,11 +22,13 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/interp/replay"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/recorder"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/safetyscissors/journal"
 	"github.com/egladman/magus/libs/safetyscissors/tier"
@@ -419,7 +423,7 @@ func TestBuzzCmd_TraceRecordsEachCompilePhaseOnce(t *testing.T) {
 
 func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
 	root := t.TempDir()
-	require.NoError(t, recordBuzzRun(testkit.WithEnvResolver(t.Context()), root, "probe.buzz", "code", []string{"--x"}, false, []byte("hello\n"), time.Now(), nil))
+	require.NoError(t, recordBuzzRun(testkit.WithEnvResolver(t.Context()), root, "probe.buzz", "code", []string{"--x"}, false, []byte("hello\n"), time.Now(), nil, ""))
 
 	dir, err := magus.ResolveCacheDir(root)
 	require.NoError(t, err)
@@ -442,15 +446,18 @@ func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
 type BuzzRecordSuite struct {
 	suite.Suite
 	root string
+	// name is the script name run and place use. A script that imports a file needs a
+	// path, so its imports resolve beside it.
+	name string
 }
 
 func TestBuzzRecordSuite(t *testing.T) { suite.Run(t, new(BuzzRecordSuite)) }
 
-func (s *BuzzRecordSuite) SetupTest() { s.root = s.T().TempDir() }
+func (s *BuzzRecordSuite) SetupTest() { s.root, s.name = s.T().TempDir(), "probe.buzz" }
 
 func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
 	args := []string{"a", "b"}
-	s.Require().NoError(recordBuzzRun(testkit.WithEnvResolver(s.T().Context()), s.root, "p.buzz", "code", args, false, nil, time.Now(), nil))
+	s.Require().NoError(recordBuzzRun(testkit.WithEnvResolver(s.T().Context()), s.root, "p.buzz", "code", args, false, nil, time.Now(), nil, ""))
 
 	dir, err := magus.ResolveCacheDir(s.root)
 	s.Require().NoError(err)
@@ -460,6 +467,309 @@ func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
 	s.Require().NoError(err)
 	d.Ref, d.TimestampMs, d.DurationMs, d.PersistedNs, d.Attempt, d.Key, d.KeyVersion, d.Inv = "", 0, 0, 0, "", "", "", ""
 	s.Equal(cache.OutputDescriptor{Project: ".", Target: "buzz p.buzz", ExtraArgs: args, Lease: lease}, d)
+}
+
+const replayScript = `import "std";
+import "magus";
+std\print(magus\canonicalName("HTTPServer"));
+`
+
+// replayRecord reads the record the run of replayScript under args wrote.
+func (s *BuzzRecordSuite) replayRecord(ctx context.Context, args []string) (replay.Header, []replay.Call, error) {
+	dir, _, _, key, err := recordKey(ctx, s.root, "probe.buzz", replayScript, args, false)
+	s.Require().NoError(err)
+	return replay.Read(filepath.Join(dir, "replay"), cache.PortableRef(key))
+}
+
+func (s *BuzzRecordSuite) TestRecordedRunWritesCalls() {
+	ctx := testkit.WithEnvResolver(s.T().Context())
+	opts := interp.ScriptOptions{Record: true}
+	s.Require().NoError(newBuzzRunner(ctx).RunSource(ctx, s.root, opts, "probe.buzz", replayScript, []string{"--x"}))
+
+	h, calls, err := s.replayRecord(ctx, []string{"--x"})
+	s.Require().NoError(err)
+	s.Equal(replay.Header{Format: "magus.replay/v1alpha1", Script: "probe.buzz", Args: []string{"--x"}, Imports: map[string]string{}}, h)
+	for i := range calls {
+		calls[i].StartedAt, calls[i].ArgsDigest = 0, ""
+	}
+	s.Equal([]replay.Call{
+		{Seq: 0, Parent: -1, Name: "magus.canonicalName", End: "returned", Result: `"http-server"`},
+		{Seq: 1, Parent: -1, Name: "std.print", End: "returned"},
+	}, calls)
+}
+
+func (s *BuzzRecordSuite) TestUnrecordedRunWritesNothing() {
+	ctx := testkit.WithEnvResolver(s.T().Context())
+	s.Require().NoError(newBuzzRunner(ctx).RunSource(ctx, s.root, interp.ScriptOptions{}, "probe.buzz", replayScript, nil))
+
+	_, _, err := s.replayRecord(ctx, nil)
+	s.ErrorIs(err, replay.RefusalNoRecord)
+}
+
+// probe is a module a recorded script calls, with natives that count their runs.
+// step reports its name to the call interceptor as step. It cancels the run when called
+// with dieAt, as a machine that went down would.
+type probe struct {
+	step     string
+	stepFunc bool
+	dieAt    int64
+	ran      []int64
+	reported int64
+	cancel   context.CancelFunc
+}
+
+const stepScript = `import "probe";
+final a = probe\step(1);
+final b = probe\step(2);
+final c = probe\step(3);
+probe\report(a + b + c);
+`
+
+// install puts the probe module on runner beside the real ones.
+func (p *probe) install(runner *interp.ScriptRunner) {
+	inner := runner.Host.RegisterModules
+	runner.Host.RegisterModules = func(ctx context.Context, sess *buzz.Session, out io.Writer) {
+		inner(ctx, sess, out)
+		mod := vm.NewMap()
+		mod.MapSet("step", vm.DirectValue(p.step, func(_ context.Context, args []vm.Value) (vm.Value, error) {
+			n := args[0].AsInt()
+			p.ran = append(p.ran, n)
+			if n == p.dieAt {
+				p.cancel()
+				return vm.Null, context.Canceled
+			}
+			if p.stepFunc {
+				return vm.DirectValue("probe.cb", func(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil }), nil
+			}
+			return vm.IntValue(n*10 + 1), nil
+		}))
+		mod.MapSet("report", vm.DirectValue("math.report", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+			p.reported = args[0].AsInt()
+			return vm.Null, nil
+		}))
+		sess.SetNativeModule("probe", mod)
+	}
+}
+
+// run runs script under --record, on a context the probe can cancel.
+func (s *BuzzRecordSuite) run(p *probe, script string, opts interp.ScriptOptions) (string, error) {
+	ctx, cancel := context.WithCancel(testkit.WithEnvResolver(s.T().Context()))
+	defer cancel()
+	p.cancel = cancel
+	runner := newBuzzRunner(ctx)
+	p.install(runner)
+	opts.Record = true
+	var err error
+	stderr := captureStderr(s.T(), func() { err = runner.RunSource(ctx, s.root, opts, s.name, script, nil) })
+	return stderr, err
+}
+
+// place is where the record of script lives.
+func (s *BuzzRecordSuite) place(script string) (dir, ref string) {
+	cacheDir, _, _, key, err := recordKey(testkit.WithEnvResolver(s.T().Context()), s.root, s.name, script, nil, false)
+	s.Require().NoError(err)
+	return filepath.Join(cacheDir, "replay"), cache.PortableRef(key)
+}
+
+func (s *BuzzRecordSuite) finished(script string) bool {
+	dir, ref := s.place(script)
+	done, err := replay.Finished(dir, ref)
+	s.Require().NoError(err)
+	return done
+}
+
+func (s *BuzzRecordSuite) TestARerunResumesAnInterruptedRecordedRun() {
+	reference := &probe{step: "math.step"}
+	_, err := s.run(reference, stepScript, interp.ScriptOptions{})
+	s.Require().NoError(err)
+	s.Equal(int64(11+21+31), reference.reported)
+	s.Equal([]int64{1, 2, 3}, reference.ran)
+	s.True(s.finished(stepScript), "a run that reached its end is marked finished")
+
+	first := &probe{step: "math.step", dieAt: 2}
+	_, err = s.run(first, stepScript, interp.ScriptOptions{})
+	s.Require().Error(err, "the first run was cut off")
+	s.Equal([]int64{1, 2}, first.ran)
+	s.False(s.finished(stepScript), "a cut-off run is not finished")
+
+	again := &probe{step: "math.step"}
+	stderr, err := s.run(again, stepScript, interp.ScriptOptions{})
+	s.Require().NoError(err)
+	s.Equal([]int64{2, 3}, again.ran, "call 1 was not run again, the interrupted call 2 was, and call 3 is new")
+	s.Equal(reference.reported, again.reported, "the resumed run reaches the result an uninterrupted run does")
+	_, ref := s.place(stepScript)
+	s.Contains(stderr, fmt.Sprintf("resuming %s: 2 calls on record", ref))
+	s.True(s.finished(stepScript), "the record ends finished")
+
+	third := &probe{step: "math.step"}
+	stderr, err = s.run(third, stepScript, interp.ScriptOptions{})
+	s.Require().NoError(err)
+	s.Equal([]int64{1, 2, 3}, third.ran, "a finished run's rerun is a new attempt from the top")
+	s.NotContains(stderr, "resuming")
+}
+
+func (s *BuzzRecordSuite) TestRestartDiscardsTheRecord() {
+	first := &probe{step: "math.step", dieAt: 2}
+	_, err := s.run(first, stepScript, interp.ScriptOptions{})
+	s.Require().Error(err)
+
+	again := &probe{step: "math.step"}
+	stderr, err := s.run(again, stepScript, interp.ScriptOptions{Restart: true})
+	s.Require().NoError(err)
+	s.Equal([]int64{1, 2, 3}, again.ran, "every call ran again")
+	s.NotContains(stderr, "resuming")
+	s.True(s.finished(stepScript))
+}
+
+func (s *BuzzRecordSuite) TestRestartNeedsRecord() {
+	ctx := testkit.WithEnvResolver(s.T().Context())
+	err := newBuzzRunner(ctx).RunSource(ctx, s.root, interp.ScriptOptions{Restart: true}, "probe.buzz", stepScript, nil)
+	s.ErrorContains(err, "--restart")
+	s.ErrorContains(err, "add --record")
+}
+
+// refused cuts a run off with first, reruns it as second, and returns the rerun's error.
+func (s *BuzzRecordSuite) refused(first, second *probe, script string) error {
+	_, err := s.run(first, script, interp.ScriptOptions{})
+	s.Require().Error(err)
+	_, err = s.run(second, script, interp.ScriptOptions{})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "run again with --restart to discard the record and start from the top")
+	return err
+}
+
+func (s *BuzzRecordSuite) TestADifferentCallRefusesTheRerun() {
+	second := &probe{step: "math.other"}
+	err := s.refused(&probe{step: "math.step", dieAt: 2}, second, stepScript)
+	s.ErrorIs(err, replay.RefusalDiverged)
+	s.ErrorContains(err, "call #0 math.step")
+	s.ErrorContains(err, "but the run made math.other[")
+	s.Empty(second.ran, "no call ran after the refusal")
+}
+
+func (s *BuzzRecordSuite) TestAnUnencodableResultRefusesTheRerun() {
+	const script = "import \"probe\";\nfinal a = probe\\step(1);\nfinal b = probe\\step(2);\n"
+	second := &probe{step: "math.step", stepFunc: true}
+	err := s.refused(&probe{step: "math.step", stepFunc: true, dieAt: 2}, second, script)
+	s.ErrorIs(err, replay.RefusalUnencodable)
+	s.ErrorContains(err, "call #0 math.step")
+	s.Empty(second.ran)
+}
+
+func (s *BuzzRecordSuite) TestALiveModuleRefusesTheRerun() {
+	second := &probe{step: "screen.open"}
+	err := s.refused(&probe{step: "screen.open", dieAt: 2}, second, stepScript)
+	s.ErrorIs(err, replay.RefusalLive)
+	s.ErrorContains(err, "call #0 screen.open")
+	s.Empty(second.ran)
+}
+
+func (s *BuzzRecordSuite) TestAnInterruptedCallThatCannotRepeatRefusesTheRerun() {
+	second := &probe{step: "proc.exec"}
+	err := s.refused(&probe{step: "proc.exec", dieAt: 2}, second, stepScript)
+	s.ErrorIs(err, replay.RefusalOutcomeUnknown)
+	s.ErrorContains(err, "call #1 proc.exec")
+	s.Empty(second.ran, "the interrupted call was not run again")
+}
+
+const importingStepScript = `import "probe";
+import "lib";
+final a = probe\step(1);
+final b = probe\step(2);
+probe\report(a + b + lib);
+`
+
+// importing names the script by a path in the root, beside a lib.buzz holding src.
+func (s *BuzzRecordSuite) importing(src string) string {
+	s.name = filepath.Join(s.root, "main.buzz")
+	lib := filepath.Join(s.root, "lib.buzz")
+	s.Require().NoError(os.WriteFile(lib, []byte(src), 0o644))
+	return lib
+}
+
+func (s *BuzzRecordSuite) TestARecordedRunHoldsItsImportDigests() {
+	lib := s.importing(`export final lib = 1;`)
+	_, err := s.run(&probe{step: "math.step"}, importingStepScript, interp.ScriptOptions{})
+	s.Require().NoError(err)
+
+	dir, ref := s.place(importingStepScript)
+	h, _, err := replay.Read(dir, ref)
+	s.Require().NoError(err)
+	abs, err := filepath.Abs(lib)
+	s.Require().NoError(err)
+	sum := sha256.Sum256([]byte(`export final lib = 1;`))
+	s.Equal(map[string]string{abs: hex.EncodeToString(sum[:])}, h.Imports)
+}
+
+func (s *BuzzRecordSuite) TestAChangedImportRefusesTheRerunNamingTheFile() {
+	lib := s.importing(`export final lib = 1;`)
+	_, err := s.run(&probe{step: "math.step", dieAt: 2}, importingStepScript, interp.ScriptOptions{})
+	s.Require().Error(err)
+	s.Require().NoError(os.WriteFile(lib, []byte(`export final lib = 2;`), 0o644))
+
+	second := &probe{step: "math.step"}
+	_, err = s.run(second, importingStepScript, interp.ScriptOptions{})
+	s.Require().ErrorIs(err, replay.RefusalImportChanged)
+	s.ErrorContains(err, "lib.buzz changed: recorded sha256 ")
+	s.ErrorContains(err, "run again with --restart to discard the record and start from the top")
+	s.Empty(second.ran, "the entry's top level did not run")
+
+	_, err = s.run(&probe{step: "math.step"}, importingStepScript, interp.ScriptOptions{Restart: true})
+	s.NoError(err, "--restart is the remedy")
+}
+
+func (s *BuzzRecordSuite) shownCalls(script string) string {
+	dir, ref := s.place(script)
+	var b strings.Builder
+	writeRecordedCalls(&b, dir, ref)
+	return b.String()
+}
+
+func (s *BuzzRecordSuite) TestQueryOutputShowsAStoppedRunsCallsWithTheOpenOneMarked() {
+	_, err := s.run(&probe{step: "math.step", dieAt: 2}, stepScript, interp.ScriptOptions{})
+	s.Require().Error(err)
+
+	dir, ref := s.place(stepScript)
+	s.Equal(fmt.Sprintf("\ncalls: 2 recorded for probe.buzz, the last 2 shown; all of them are in %s\n",
+		filepath.Join(dir, ref, "calls.jsonl"))+
+		"  #0     math.step                    returned\n"+
+		"  #1     math.step                    open  <- the run stopped inside this call\n",
+		s.shownCalls(stepScript))
+}
+
+func (s *BuzzRecordSuite) TestQueryOutputShowsOnlyTheLastCallsOfALongRun() {
+	const script = `import "probe";
+fun main() > void {
+    var i = 0;
+    while (i < 25) { _ = probe\step(i); i = i + 1; }
+}
+`
+	_, err := s.run(&probe{step: "math.step", dieAt: -1}, script, interp.ScriptOptions{})
+	s.Require().NoError(err)
+
+	out := s.shownCalls(script)
+	s.Contains(out, "calls: 25 recorded for probe.buzz, the last 20 shown; all of them are in ")
+	s.NotContains(out, "#4 ", "the first calls are left to the log")
+	s.Contains(out, "#5 ")
+	s.Contains(out, "#24 ")
+}
+
+func (s *BuzzRecordSuite) TestOnlyARecordedBuzzRunKeepsCalls() {
+	s.True(recordsCalls("buzz hack/dev/land.buzz"))
+	s.False(recordsCalls("buzz -t hack/dev/land.buzz"), "a test run keeps no log")
+	s.False(recordsCalls("build"))
+}
+
+func (s *BuzzRecordSuite) TestAnUnchangedImportResumes() {
+	s.importing(`export final lib = 1;`)
+	_, err := s.run(&probe{step: "math.step", dieAt: 2}, importingStepScript, interp.ScriptOptions{})
+	s.Require().Error(err)
+
+	again := &probe{step: "math.step"}
+	_, err = s.run(again, importingStepScript, interp.ScriptOptions{})
+	s.Require().NoError(err)
+	s.Equal([]int64{2}, again.ran)
+	s.Equal(int64(11+21+1), again.reported)
 }
 
 func (s *BuzzRecordSuite) scriptCheckRow(id, root, script string) job.Job {
@@ -500,7 +810,7 @@ func (s *BuzzRecordSuite) TestRecordPrintsItsRefOnStderrWhateverTheLogLevel() {
 	s.Require().NoError(err)
 	saved := os.Stderr
 	os.Stderr = w
-	recErr := recordBuzzRun(testkit.WithEnvResolver(s.T().Context()), s.root, "p.buzz", "code", nil, false, nil, time.Now(), nil)
+	recErr := recordBuzzRun(testkit.WithEnvResolver(s.T().Context()), s.root, "p.buzz", "code", nil, false, nil, time.Now(), nil, "")
 	os.Stderr = saved
 	s.Require().NoError(w.Close())
 	printed, err := io.ReadAll(r)
@@ -525,7 +835,7 @@ func (s *BuzzRecordSuite) TestAStaleJobStoreRecordsTheRunWithoutALease() {
 	s.Require().NoError(err)
 	saved := os.Stderr
 	os.Stderr = w
-	recErr := recordBuzzRun(testkit.WithEnvResolver(s.T().Context()), root, "p.buzz", "code", nil, true, nil, time.Now(), nil)
+	recErr := recordBuzzRun(testkit.WithEnvResolver(s.T().Context()), root, "p.buzz", "code", nil, true, nil, time.Now(), nil, "")
 	os.Stderr = saved
 	s.Require().NoError(w.Close())
 	printed, err := io.ReadAll(r)
@@ -543,7 +853,7 @@ func (s *BuzzRecordSuite) TestRecordReturnsTheReasonWhenTheStoreCannotWrite() {
 	s.Require().NoError(os.MkdirAll(dir, 0o755))
 	s.Require().NoError(os.WriteFile(filepath.Join(dir, "outputs"), []byte("x"), 0o644))
 
-	err = recordBuzzRun(testkit.WithEnvResolver(s.T().Context()), s.root, "p.buzz", "code", nil, false, nil, time.Now(), nil)
+	err = recordBuzzRun(testkit.WithEnvResolver(s.T().Context()), s.root, "p.buzz", "code", nil, false, nil, time.Now(), nil, "")
 	s.Require().Error(err)
 	s.Contains(err.Error(), "--record: store the run")
 }

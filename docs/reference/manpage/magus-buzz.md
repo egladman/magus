@@ -86,6 +86,9 @@ runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.
 **--[no-]record** (default: off)
 : Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (magus query output \<ref\> reopens it)
 
+**--[no-]restart** (default: off)
+: With --record, discard the replay log of this run and start from the top, instead of resuming a run that died
+
 **-t**
 : Run the test "..." {} blocks of every script given and report pass/fail
 

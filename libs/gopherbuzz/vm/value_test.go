@@ -2,6 +2,7 @@ package vm
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,21 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
+
+func TestSuspendedValueReadsOnlyTheSuspendSignal(t *testing.T) {
+	v, ok := SuspendedValue(Suspend(StringValue("parked")))
+	require.True(t, ok)
+	assert.Equal(t, "parked", v.AsString())
+	_, ok = SuspendedValue(errors.New("native refused"))
+	assert.False(t, ok)
+	_, ok = SuspendedValue(nil)
+	assert.False(t, ok)
+}
+
+func TestObjectProbesAnswerNothingForAPlainValue(t *testing.T) {
+	assert.False(t, IntValue(1).HasNativePayload())
+	assert.Nil(t, IntValue(1).ObjectFieldNames())
+}
 
 func TestValueConstructorsAndPredicates(t *testing.T) {
 	noop := func(_ context.Context, _ []Value) (Value, error) { return NullValue(), nil }

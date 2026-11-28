@@ -98,6 +98,9 @@ type VM struct {
 	// owner holds every heap slot this VM allocates or adopts; nil means the
 	// slots belong to nobody and live for the process. See Owner.
 	owner *Owner
+	// interceptor sees each call into a native; nil runs them directly. It
+	// comes from the ctx the VM is built on, so fibers and callbacks inherit it.
+	interceptor CallInterceptor
 	// collectables are instances whose type declares a `collect()` method, tracked
 	// so CollectUnreachable can call it when the program can no longer reach them.
 	// One registry per fiber tree, held on the root VM (see gcParent, gcRoot), and
@@ -200,6 +203,7 @@ func NewVM(ctx context.Context) *VM {
 	if parent := FromContext(ctx); parent != nil {
 		vm.owner = parent.owner
 	}
+	vm.interceptor, _ = ctx.Value(callInterceptorKey{}).(CallInterceptor)
 	// The VM is reachable from the context every host callable receives, which is
 	// what lets `gc\collect()` ask the interpreter about its own reachability. It is
 	// the only operation that needs this; everything else works from its arguments.
@@ -1031,7 +1035,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				//     later stack writes; the contract is documented at the type.
 				//   assumes: direct callables don't retain args (audited: stdlib, ffi, and the
 				//     magus host bindings all copy out or consume synchronously).
-				result, err := directFn.Fn(vm.ctx, vm.stack[calleeIdx+1:stackLen])
+				result, err := vm.interceptCall(directFn, vm.stack[calleeIdx+1:stackLen])
 				if err != nil {
 					if vm.suspendedAtCall(err, calleeIdx) {
 						return Null, err
@@ -1236,10 +1240,10 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			}
 			switch {
 			case direct != nil:
-				result, ferr := direct.Fn(vm.ctx, vm.stack[recvIdx+1:stackLen])
+				result, ferr := vm.interceptCall(direct, vm.stack[recvIdx+1:stackLen])
 				if ferr != nil {
 					// The method-call path, which is how a host module's function is
-					// actually reached (`host.wait()`), so it is where a suspending
+					// actually reached (`probe.wait()`), so it is where a suspending
 					// native most often arrives.
 					if vm.suspendedAtCall(ferr, recvIdx) {
 						return Null, ferr
@@ -2340,8 +2344,7 @@ func (vm *VM) growWindow(need int) {
 func (vm *VM) Call(callee Value, args []Value) error {
 	switch callee.tag() {
 	case tagDirect:
-		directFn := vm.asDirect(callee)
-		result, err := directFn.Fn(vm.ctx, args)
+		result, err := vm.interceptCall(vm.asDirect(callee), args)
 		if err != nil {
 			return err
 		}
@@ -2414,7 +2417,7 @@ func (vm *VM) Invoke(receiver Value, name string, args []Value) (Value, error) {
 		return vm.Exec()
 	case tagDirect:
 		// A builtin or a host closure runs in place and leaves no frame for Exec.
-		result, err := vm.asDirect(callee).Fn(vm.ctx, args)
+		result, err := vm.interceptCall(vm.asDirect(callee), args)
 		if err != nil {
 			return Null, err
 		}

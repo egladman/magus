@@ -21,11 +21,13 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/interp/replay"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/libs/clikit/exit"
 	"github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	jobtypes "github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/libs/termkit"
 )
@@ -154,7 +156,7 @@ func buzzCommand(ctx context.Context, root string, args []string) (retErr error)
 		return buzzRepl(ctx, !bf.Autoload)
 	}
 
-	opts := interp.ScriptOptions{Embedded: bf.Embedded, Inline: bf.E != "", Test: bf.Test, Record: bf.Record}
+	opts := interp.ScriptOptions{Embedded: bf.Embedded, Inline: bf.E != "", Test: bf.Test, Record: bf.Record, Restart: bf.Restart}
 	if bf.Test {
 		return runner.Test(ctx, root, opts, bf.Coverprofile, bf.E, rest, forwarded)
 	}
@@ -181,8 +183,9 @@ func newBuzzRunner(ctx context.Context) *interp.ScriptRunner {
 		},
 		Phase: observability.TraceFromContext(ctx).Phase,
 		Record: func(ctx context.Context, root string, rec interp.ScriptRecord) error {
-			return recordBuzzRun(ctx, root, rec.Name, rec.Code, rec.Args, rec.Test, rec.Out, rec.Started, rec.Err)
+			return recordBuzzRun(ctx, root, rec.Name, rec.Code, rec.Args, rec.Test, rec.Out, rec.Started, rec.Err, rec.DiedIn)
 		},
+		Replay: openReplayLog,
 	}
 }
 
@@ -201,21 +204,10 @@ func openScriptWorkspace(ctx context.Context, root string) (*interp.ScriptWorksp
 // A test run is stored as `buzz -t <script>`, apart from the script's main.
 // The record holds the args and the lease, so a check binds to both.
 // A failure to record is returned. The ref skips slog, which silent mode drops.
-func recordBuzzRun(ctx context.Context, root, name, code string, args []string, test bool, out []byte, started time.Time, runErr error) error {
-	if root == "" {
-		root = "."
-	}
-	dir, err := magus.ResolveCacheDir(root, cliOptions()...)
+func recordBuzzRun(ctx context.Context, root, name, code string, args []string, test bool, out []byte, started time.Time, runErr error, diedIn string) error {
+	dir, lease, target, key, err := recordKey(ctx, root, name, code, args, test)
 	if err != nil {
-		return fmt.Errorf("magus buzz: --record: no output store here: %w", err)
-	}
-	lease, err := recordLease(ctx, root, name)
-	if err != nil {
-		return fmt.Errorf("magus buzz: --record: %w", err)
-	}
-	target, key := "buzz "+name, interp.ScriptRunKey(name, code, lease, args)
-	if test {
-		target, key = "buzz -t "+name, interp.ScriptRunKey(name, code, lease, append([]string{"-t"}, args...))
+		return err
 	}
 	d := cache.OutputDescriptor{
 		Project:     ".",
@@ -233,8 +225,114 @@ func recordBuzzRun(ctx context.Context, root, name, code string, args []string, 
 	if err != nil {
 		return fmt.Errorf("magus buzz: --record: store the run: %w", err)
 	}
-	_, err = fmt.Fprintln(os.Stderr, "ref  "+stored.Ref)
+	line := "ref  " + stored.Ref
+	if runErr != nil && diedIn != "" {
+		line += "  died in call " + diedIn
+	}
+	_, err = fmt.Fprintln(os.Stderr, line)
 	return err
+}
+
+// recordKey resolves where a recorded run's output lives: the cache dir, the lease it
+// acts under, the target name and the output-store key.
+func recordKey(ctx context.Context, root, name, code string, args []string, test bool) (dir, lease, target, key string, err error) {
+	if root == "" {
+		root = "."
+	}
+	dir, err = magus.ResolveCacheDir(root, cliOptions()...)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("magus buzz: --record: no output store here: %w", err)
+	}
+	lease, err = recordLease(ctx, root, name)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("magus buzz: --record: %w", err)
+	}
+	target, key = "buzz "+name, interp.ScriptRunKey(name, code, lease, args)
+	if test {
+		target, key = "buzz -t "+name, interp.ScriptRunKey(name, code, lease, append([]string{"-t"}, args...))
+	}
+	return dir, lease, target, key, nil
+}
+
+// openReplayLog opens a run's replay log beside the output store, under the ref
+// its output prints. The session reports the run's imports once the entry compiles: a
+// fresh record writes them, and a resumed one is refused if they changed.
+func openReplayLog(ctx context.Context, root string, rec interp.ScriptRecord, restart bool) (*interp.ReplayLog, error) {
+	cacheDir, _, _, key, err := recordKey(ctx, root, rec.Name, rec.Code, rec.Args, false)
+	if err != nil {
+		return nil, err
+	}
+	dir, ref := filepath.Join(cacheDir, "replay"), cache.PortableRef(key)
+	header := replay.Header{Script: rec.Name, Args: rec.Args}
+	recorded, earlier, resumes, err := earlierCalls(dir, ref, restart)
+	if err != nil {
+		return nil, fmt.Errorf("magus buzz: --record: %w", err)
+	}
+	store, err := replay.OpenLog(dir, ref, header)
+	if err != nil {
+		return nil, fmt.Errorf("magus buzz: --record: %w", err)
+	}
+	recorder := replay.NewRecorder(store)
+	log := &interp.ReplayLog{
+		Interceptor: recorder,
+		Imports:     recorder.Imports,
+		DiedIn: func(runErr error) string {
+			if c, ok := recorder.DiedIn(runErr); ok {
+				return fmt.Sprintf("#%d %s", c.Seq, c.Name)
+			}
+			return ""
+		},
+	}
+	var player *replay.Player
+	if resumes {
+		var sess *buzz.Session
+		defOf := func(typeName string) (vm.Value, bool) {
+			def := sess.GetGlobal(typeName)
+			return def, def.IsObjectDef()
+		}
+		fmt.Fprintf(os.Stderr, "resuming %s: %d calls on record\n", ref, len(earlier))
+		player = replay.NewPlayer(recorded, earlier, replay.NativeClass, defOf, recorder)
+		log.Interceptor, log.Imports = player, player.Imports
+		log.Attach = func(s *buzz.Session) { sess = s }
+	}
+	log.Close = func(ended bool, runErr error) error {
+		return closeReplay(store, player, ended, runErr)
+	}
+	return log, nil
+}
+
+// earlierCalls is the record of ref a rerun resumes, and resumes is false when there is
+// none. A finished run's record is discarded so the rerun starts a new attempt, and
+// restart discards one that is not.
+func earlierCalls(dir, ref string, restart bool) (h replay.Header, calls []replay.Call, resumes bool, err error) {
+	finished, err := replay.Finished(dir, ref)
+	switch {
+	case errors.Is(err, replay.RefusalNoRecord):
+		return replay.Header{}, nil, false, nil
+	case err != nil:
+		return replay.Header{}, nil, false, err
+	case restart || finished:
+		return replay.Header{}, nil, false, replay.Discard(dir, ref)
+	}
+	h, calls, err = replay.Read(dir, ref)
+	return h, calls, err == nil, err
+}
+
+// closeReplay ends the record. A run that reached its end on its own gets the
+// footer a rerun reads as finished, unless the replay refused it or stopped short.
+func closeReplay(store *replay.Log, player *replay.Player, ended bool, runErr error) error {
+	var refusal error
+	if player != nil {
+		refusal = player.Err()
+		if refusal == nil && ended && runErr == nil {
+			refusal = player.Unreplayed()
+		}
+	}
+	var finishErr error
+	if ended && refusal == nil {
+		finishErr = store.Finish()
+	}
+	return errors.Join(refusal, finishErr, store.Close())
 }
 
 // recordLease is the lease a recorded run of script acts under.

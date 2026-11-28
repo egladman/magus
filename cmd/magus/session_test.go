@@ -6,10 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/interp/replay"
 	"github.com/egladman/magus/libs/termkit"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
 // The helpers below are shared by test files that other groups still own:
@@ -69,4 +71,42 @@ func TestSessionShowNamesTheCostSectionsItCouldNotMeasure(t *testing.T) {
 	assert.Contains(t, out, "Cost, with the root as the main thread:")
 	assert.Contains(t, out, "root context     not measured: this checkout's activity log holds nothing for the session")
 	assert.NotContains(t, out, "$0.00")
+}
+
+type BriefStoppedRunsSuite struct {
+	suite.Suite
+	dir string
+}
+
+func TestBriefStoppedRunsSuite(t *testing.T) { suite.Run(t, new(BriefStoppedRunsSuite)) }
+
+func (s *BriefStoppedRunsSuite) SetupTest() { s.dir = filepath.Join(s.T().TempDir(), "replay") }
+
+func (s *BriefStoppedRunsSuite) record(ref string, finish bool) {
+	log, err := replay.OpenLog(s.dir, ref, replay.Header{Script: "hack/dev/land.buzz", Args: []string{"--dry-run"}})
+	s.Require().NoError(err)
+	if finish {
+		s.Require().NoError(log.Finish())
+	}
+	s.Require().NoError(log.Close())
+}
+
+func (s *BriefStoppedRunsSuite) brief() string {
+	var b strings.Builder
+	writeStoppedRuns(&b, s.dir)
+	return b.String()
+}
+
+func (s *BriefStoppedRunsSuite) TestAStoppedRunIsListedWithItsResumeAndRestart() {
+	s.record("out1", false)
+	s.Equal("\ninterrupted recorded runs (magus resumes none by itself):\n"+
+		"  out1 hack/dev/land.buzz stopped between calls\n"+
+		"    resume:  magus buzz --record hack/dev/land.buzz -- --dry-run\n"+
+		"    restart: magus buzz --record --restart hack/dev/land.buzz -- --dry-run\n", s.brief())
+}
+
+func (s *BriefStoppedRunsSuite) TestNoStoppedRunPrintsNothing() {
+	s.Empty(s.brief(), "no replay directory at all")
+	s.record("out1", true)
+	s.Empty(s.brief(), "a finished run is not interrupted")
 }

@@ -99,7 +99,6 @@
 {"group":"file:changes/unreleased/claim-callers-of-a-symbol.md","path":"changes/unreleased/claim-callers-of-a-symbol.md"}
 {"group":"file:changes/unreleased/claim-sizing.md","path":"changes/unreleased/claim-sizing.md"}
 {"group":"file:changes/unreleased/clones-hg-jj-or-sapling-repository.md","path":"changes/unreleased/clones-hg-jj-or-sapling-repository.md"}
-{"group":"file:changes/unreleased/commit-load-asks-why.md","path":"changes/unreleased/commit-load-asks-why.md"}
 {"group":"file:changes/unreleased/compact-worker-records.md","path":"changes/unreleased/compact-worker-records.md"}
 {"group":"file:changes/unreleased/conformance-alias.md","path":"changes/unreleased/conformance-alias.md"}
 {"group":"file:changes/unreleased/conformance-sibling-sprawl.md","path":"changes/unreleased/conformance-sibling-sprawl.md"}
@@ -299,6 +298,7 @@
 {"group":"file:changes/unreleased/renames.md","path":"changes/unreleased/renames.md"}
 {"group":"file:changes/unreleased/renderedskills-takes-form-not-variant.md","path":"changes/unreleased/renderedskills-takes-form-not-variant.md"}
 {"group":"file:changes/unreleased/repeated-guard-deny-one-line-ref.md","path":"changes/unreleased/repeated-guard-deny-one-line-ref.md"}
+{"group":"file:changes/unreleased/replay-log.md","path":"changes/unreleased/replay-log.md"}
 {"group":"file:changes/unreleased/result-type.md","path":"changes/unreleased/result-type.md"}
 {"group":"file:changes/unreleased/review-1-rest-2.md","path":"changes/unreleased/review-1-rest-2.md"}
 {"group":"file:changes/unreleased/review-merged-while-reading.md","path":"changes/unreleased/review-merged-while-reading.md"}
@@ -1801,6 +1801,8 @@
 {"group":"dir:libs/gopherbuzz/std/testdata","path":"libs/gopherbuzz/std/testdata/str_split.buzz"}
 {"group":"dir:libs/gopherbuzz/std/testdata","path":"libs/gopherbuzz/std/testdata/try_host_error.buzz"}
 {"group":"dir:libs/gopherbuzz/std/testdata","path":"libs/gopherbuzz/std/testdata/try_host_error_zdef.buzz"}
+{"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/call_interceptor.go"}
+{"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/call_interceptor_test.go"}
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/chunk.go"}
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/debug_types.go"}
 {"group":"dir:libs/gopherbuzz/vm","path":"libs/gopherbuzz/vm/env.go"}
