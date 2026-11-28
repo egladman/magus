@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
 )
 
 type StoreSuite struct {

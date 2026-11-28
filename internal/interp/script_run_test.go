@@ -30,14 +30,14 @@ func (n *namesSeen) InterceptCall(ctx context.Context, name string, args []vm.Va
 
 type ReplayRunSuite struct {
 	suite.Suite
-	seen     *namesSeen
-	opened   int
-	closed   int
+	seen   *namesSeen
+	opened int
+	closed int
 	// ended, restarted and closeErr are what the log saw and what it returns on Close.
 	ended, restarted bool
 	closeErr         error
-	recorded []ScriptRecord
-	runner   *ScriptRunner
+	recorded         []ScriptRecord
+	runner           *ScriptRunner
 }
 
 func TestReplayRun(t *testing.T) { suite.Run(t, new(ReplayRunSuite)) }
