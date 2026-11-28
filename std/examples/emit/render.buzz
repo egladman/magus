@@ -7,7 +7,7 @@ fun main(args: [str]) > void !> any {
         emit\hole("Round", spec: "ident", expression: "first"),
         emit\hole("Zero", spec: "ident", expression: "second"),
     ], sep: ", ");
-    final line = emit\join([emit\text("var _ = []any{"), names, emit\text("}\n")], sep: "");
+    final line = emit\join([emit\text("var _ = []any\{"), names, emit\text("}\n")], sep: "");
 
     final text = emit\render(line, path: "price/names.go");
     if (text.error -> err) { throw err.message; }
