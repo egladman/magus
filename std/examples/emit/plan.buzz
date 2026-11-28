@@ -1,0 +1,49 @@
+import "emit";
+import "result";
+import "splice";
+import "std";
+
+object Case { name: str, fn: str, arg: str, want: str }
+
+// suiteFile loads one template per case, nests them in the suite template and
+// names the file the suite becomes.
+fun suiteFile(dir: str, cases: [Case]) > result\Result::<emit\File> {
+    final parts = mut [<emit\Template>];
+    foreach (c in cases) {
+        final values: {str: any} = {
+            "suite": "priceSuite", "test": "Test{c.name}", "pkg": "price",
+            "fn": c.fn, "arg": c.arg, "want": c.want,
+        };
+        final one = emit\load("{dir}/case.go.tmpl", values: values);
+        if (one.error -> err) { return result\Result::<emit\File>{ error = err }; }
+        parts.append(one.value!);
+    }
+    final values: {str: any} = {
+        "testPkg": "price_test", "importPath": "example.com/shop/price",
+        "suite": "priceSuite", "entry": "TestPriceSuite",
+        "cases": emit\join(parts, sep: "\n"),
+    };
+    final whole = emit\load("{dir}/suite_test.go.tmpl", values: values);
+    if (whole.error -> err) { return result\Result::<emit\File>{ error = err }; }
+    return result\Result::<emit\File>{ value = emit\file("price/price_suite_test.go", template: whole.value!) };
+}
+
+fun main(args: [str]) > void !> any {
+    final cases = [
+        Case{ name = "Round", fn = "Format", arg = "1.499", want = "1.50" },
+        Case{ name = "Zero", fn = "Format", arg = "0", want = "0.00" },
+    ];
+    final file = suiteFile("std/examples/emit", cases: cases);
+    if (file.error -> err) { throw err.message; }
+
+    // emit plans new files only; splice previews the plan and writes it.
+    final plan = emit\plan([file.value!]);
+    final preview = splice\diff(plan);
+    if (preview.error -> err) { throw err.message; }
+    std\print(preview.value!);
+
+    if (args.len() > 0 and args[0] == "apply") {
+        final done = splice\apply(plan);
+        if (done.error -> err) { throw err.message; }
+    }
+}
