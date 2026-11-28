@@ -51,6 +51,22 @@ func (s *ContractSkewSuite) TestADifferingContractRefusesAChangeAndNamesTheRelin
 	s.Contains(s.deny("touch notes.txt"), ward.RelinkAndStampAt(s.root))
 }
 
+func (s *ContractSkewSuite) TestADifferingContractAtMagusSourceNamesTheOneLineRebuild() {
+	s.carryContract()
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "go.mod"), fmt.Appendf(nil, "module %s\n\ngo 1.26\n", ownModule), 0o644))
+	msg := s.deny("touch notes.txt")
+	s.Contains(msg, rebuildOwnFix(s.root))
+	s.NotContains(msg, ward.RelinkAndStampAt(s.root))
+}
+
+func (s *ContractSkewSuite) TestAnUnreadableContractAtMagusSourceNamesTheOneLineRebuild() {
+	s.Require().NoError(os.MkdirAll(filepath.Join(s.root, "internal/commands/testdata/api.lock"), 0o755))
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "go.mod"), fmt.Appendf(nil, "module %s\n\ngo 1.26\n", ownModule), 0o644))
+	msg := s.deny("touch notes.txt")
+	s.Contains(msg, "cannot read the contract")
+	s.Contains(msg, rebuildOwnFix(s.root))
+}
+
 func (s *ContractSkewSuite) TestADifferingContractLetsAReadThrough() {
 	s.carryContract()
 	s.Empty(s.deny("git status"))
@@ -134,11 +150,11 @@ func (s *AuthorityContractSuite) TestALeasedCallMatchingItsAuthorityIsJudged() {
 }
 
 func (s *AuthorityContractSuite) TestAnUnleasedCallReadsTheWorkingTree() {
-	s.Contains(s.deny("", s.authority), "relink ./magus")
+	s.Contains(s.deny("", s.authority), rebuildOwnFix(s.root))
 }
 
 func (s *AuthorityContractSuite) TestARowWithNoAuthorityReadsTheWorkingTree() {
-	s.Contains(s.deny("worker", ""), "relink ./magus")
+	s.Contains(s.deny("worker", ""), rebuildOwnFix(s.root))
 }
 
 func (s *AuthorityContractSuite) TestAnAuthorityCarryingAnotherContractIsRefused() {
