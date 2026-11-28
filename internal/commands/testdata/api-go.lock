@@ -674,6 +674,7 @@ github.com/egladman/magus/std.MagusWorkspaceFileDiskAttention func(ctx context.C
 github.com/egladman/magus/std.MagusWorkspaceForkFacts func(ctx context.Context, w github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/libs/safetyscissors/job.ForkFacts, error)
 github.com/egladman/magus/std.MagusWorkspaceGrouping func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.Grouping, error)
 github.com/egladman/magus/std.MagusWorkspaceJobs func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.JobList, error)
+github.com/egladman/magus/std.MagusWorkspaceNewDirs func(ctx context.Context, w github.com/egladman/magus/types.MagusWorkspace, writes []string) (github.com/egladman/magus/libs/safetyscissors/job.NewDirs, error)
 github.com/egladman/magus/std.MagusWorkspaceOpen func(ctx context.Context, dir string) (github.com/egladman/magus/types.MagusWorkspace, error)
 github.com/egladman/magus/std.MagusWorkspacePutJob func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace, id string, opts map[string]any) (github.com/egladman/magus/types.Job, error)
 github.com/egladman/magus/std.MagusWorkspaceRisk func(ctx context.Context, _ github.com/egladman/magus/types.MagusWorkspace) (github.com/egladman/magus/types.ChangeRisk, error)
