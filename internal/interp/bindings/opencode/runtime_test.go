@@ -3,6 +3,11 @@ package opencode
 import (
 	"context"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -244,3 +249,83 @@ func (s *runtimeSuite) TestMissingNativeCapabilityFailsVisibly() {
 	_, err := openRuntime(context.Background(), "", nil)
 	s.ErrorContains(err, "missing native invocation")
 }
+
+// readsClosureSuite pins opencode_runtime_generate's declared reads to the
+// wasm's package closure. A package the wasm imports but the target does not
+// read leaves the cache key unmoved by its edits, so a stale wasm replays.
+type readsClosureSuite struct {
+	suite.Suite
+	root string
+}
+
+func TestDeclaredReadsCoverTheClosure(t *testing.T) { suite.Run(t, new(readsClosureSuite)) }
+
+func (s *readsClosureSuite) SetupSuite() {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	s.Require().NoError(err)
+	s.Require().FileExists(filepath.Join(root, "magusfile.buzz"))
+	s.root = root
+}
+
+func (s *readsClosureSuite) TestEveryPackageTheWasmImportsIsDeclared() {
+	declared := s.declared()
+	for _, dir := range s.firstParty() {
+		s.Containsf(declared, dir+"/*.go", "the wasm imports %s, which opencode_runtime_generate does not read: add %q to its ctx.readsFiles in magusfile.buzz", dir, dir+"/*.go")
+	}
+}
+
+func (s *readsClosureSuite) TestEveryDeclaredPackageIsInTheClosure() {
+	closure := s.firstParty()
+	for _, glob := range s.declared() {
+		if dir, ok := strings.CutSuffix(glob, "/*.go"); ok {
+			s.Containsf(closure, dir, "opencode_runtime_generate reads %q, which the wasm no longer imports: drop it from its ctx.readsFiles in magusfile.buzz", glob)
+		}
+	}
+}
+
+// The third-party packages resolve from the module cache, keyed by the go.sum
+// lines, so those files stand in for their sources.
+func (s *readsClosureSuite) TestModuleFilesAreDeclared() {
+	declared := s.declared()
+	for _, file := range []string{"go.mod", "go.sum", "libs/*/go.mod", "libs/*/go.sum"} {
+		s.Containsf(declared, file, "opencode_runtime_generate does not read %q, which pins the wasm's modules: add it to its ctx.readsFiles in magusfile.buzz", file)
+	}
+}
+
+// firstParty is each non-standard package dir in the wasm's closure that lies
+// in this checkout, root-relative with forward slashes.
+func (s *readsClosureSuite) firstParty() []string {
+	cmd := exec.CommandContext(s.T().Context(), "go", "list", "-deps", "-f", "{{if not .Standard}}{{.Dir}}{{end}}", "./internal/interp/bindings/opencode/wasm")
+	cmd.Dir = s.root
+	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm", "GOEXPERIMENT=jsonv2")
+	out, err := cmd.Output()
+	s.Require().NoError(err, "go list -deps of the wasm")
+	var dirs []string
+	for _, dir := range strings.Fields(string(out)) {
+		rel, err := filepath.Rel(s.root, dir)
+		if err == nil && filepath.IsLocal(rel) {
+			dirs = append(dirs, filepath.ToSlash(rel))
+		}
+	}
+	s.Require().NotEmpty(dirs, "go list named no package of this checkout")
+	return dirs
+}
+
+// declared is the string list opencode_runtime_generate hands ctx.readsFiles.
+func (s *readsClosureSuite) declared() []string {
+	body, err := os.ReadFile(filepath.Join(s.root, "magusfile.buzz"))
+	s.Require().NoError(err)
+	_, target, ok := strings.Cut(string(body), "export fun opencode_runtime_generate(")
+	s.Require().True(ok, "magusfile.buzz declares no opencode_runtime_generate")
+	_, reads, ok := strings.Cut(target, "ctx.readsFiles([")
+	s.Require().True(ok, "opencode_runtime_generate calls no ctx.readsFiles")
+	reads, _, ok = strings.Cut(reads, "]);")
+	s.Require().True(ok, "opencode_runtime_generate's ctx.readsFiles list is not closed")
+	var globs []string
+	for _, m := range quoted.FindAllStringSubmatch(reads, -1) {
+		globs = append(globs, m[1])
+	}
+	return globs
+}
+
+var quoted = regexp.MustCompile(`"([^"]+)"`)

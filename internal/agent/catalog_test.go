@@ -404,7 +404,7 @@ func TestMultiAgentVariantsKeepTheSameSafetyContract(t *testing.T) {
 		assert.Contains(t, text, "magus affected <target> --plan")
 		assert.Contains(t, text, "magus server status --watch=15s")
 		assert.Contains(t, text, "Nesting is allowed when the host supports it")
-		const projection = "{{.job.id}}{{range .problems}}{{println}}{{.message}}{{end}}{{range .unchecked}}{{println}}{{.}}{{end}}"
+		const projection = "{{range .problems}}{{.code}} {{.message}}{{println}}{{end}}"
 		assert.Contains(t, text, "template="+projection)
 		assert.NotContains(t, strings.ReplaceAll(text, projection, ""), "{{")
 	}

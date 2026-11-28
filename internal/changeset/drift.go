@@ -149,27 +149,30 @@ func CheckDriftForCommit(
 	if err != nil {
 		return "", false, fmt.Errorf("classify changed files: %w", err)
 	}
-	finding := driftFinding{staleProjects: types.StaleSourceProjects(files)}
-
-	if finding.empty() {
+	stale := types.StaleSourceProjects(files)
+	if len(stale) == 0 {
 		return "", false, nil
 	}
+	kase := foldCase(ctx, root, driver, commitID, func() bool {
+		after, err := driver.Metadata(ctx, root)
+		return err == nil && after.ID == commitID
+	})
+	return buildDriftNotice(driver, "commit "+commitID, commitID, stale, kase), true, nil
+}
 
-	kase := driftPushed
-	if pushed, known, perr := driver.CommitPushed(ctx, root, commitID); perr == nil && known && !pushed {
-		after, merr := driver.Metadata(ctx, root)
-		stillHead := merr == nil && after.ID == commitID
-		if stillHead {
-			kase = driftUnpushedHead
-		} else {
-			kase = driftUnpushedNotHead
-		}
+// foldCase is which fold hash takes. isTip is asked last, since the tip can move while
+// classification runs. A backend that cannot tell whether hash is pushed reads as
+// pushed, the safe side types.PushStatusReporter documents.
+func foldCase(ctx context.Context, root string, driver types.VCSDriver, hash string, isTip func() bool) driftNoticeCase {
+	pushed, known, err := driver.CommitPushed(ctx, root, hash)
+	switch {
+	case err != nil || !known || pushed:
+		return driftPushed
+	case isTip():
+		return driftUnpushedHead
+	default:
+		return driftUnpushedNotHead
 	}
-	// perr != nil (an unsupported backend included), or known == false: the reporter
-	// could not tell. kase stays driftPushed, the safe assumption types.PushStatusReporter
-	// documents.
-
-	return buildDriftNotice(commitID, finding, kase), true, nil
 }
 
 // driftNoticeCase names which of the three amend-safety branches a stale commit falls
@@ -195,35 +198,34 @@ const (
 	driftPushed
 )
 
-// driftFinding is everything CheckDriftForCommit learned about one commit.
-type driftFinding struct {
-	// staleProjects: MGS4006 (types.StaleGeneratedOutput): a declared source changed
-	// with no matching declared-output change in the same commit.
-	staleProjects []string
+// buildDriftNotice renders the MGS4006 notice for subject, which left the stale
+// projects' generated output behind. It ends with id's own command that folds the fix
+// into hash, or the follow-up commit published history takes.
+func buildDriftNotice(id types.VCSIdentity, subject, hash string, stale []string, kase driftNoticeCase) string {
+	var b strings.Builder
+	projects := strings.Join(stale, " ")
+	fmt.Fprintf(&b, "[%s] %s left generated output stale (%s changed with no matching regeneration).\n",
+		types.StaleGeneratedOutput, subject, projects)
+	fmt.Fprintf(&b, "Regenerate: magus run generate:rw %s\n", projects)
+	b.WriteString(foldLine(id, hash, kase))
+	return b.String()
 }
 
-func (f driftFinding) empty() bool { return len(f.staleProjects) == 0 }
-
-// buildDriftNotice renders the notice for a commit that left generated output
-// stale. It ends with the one VCS command that folds a fix into hash, if any.
-//
-// Pure: the caller has already decided the finding and the amend-safety case.
-func buildDriftNotice(hash string, f driftFinding, kase driftNoticeCase) string {
-	var b strings.Builder
-	if len(f.staleProjects) > 0 {
-		projects := strings.Join(f.staleProjects, " ")
-		fmt.Fprintf(&b, "[%s] commit %s left generated output stale (%s changed with no matching regeneration).\n",
-			types.StaleGeneratedOutput, hash, projects)
-		fmt.Fprintf(&b, "Regenerate: magus run generate:rw %s\n", projects)
+// foldLine is the step after regenerating: id's command that folds the outputs into
+// hash, or the follow-up commit published history takes.
+func foldLine(id types.VCSIdentity, hash string, kase driftNoticeCase) string {
+	if kase == driftPushed {
+		return fmt.Sprintf("%s is already pushed; do not amend or rebase published history. Commit the fix as a new, follow-up commit instead.", hash)
 	}
-	switch kase {
-	case driftUnpushedHead:
-		fmt.Fprintf(&b, "Then fold it into %s (unpushed, still HEAD):\n  git commit --amend --no-edit", hash)
-	case driftUnpushedNotHead:
-		fmt.Fprintf(&b, "Then fold it into %s (unpushed, but no longer HEAD):\n  git commit --fixup=%s && GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash %s^",
-			hash, hash, hash)
-	case driftPushed: // driftPushed
-		fmt.Fprintf(&b, "%s is already pushed; do not amend or rebase published history. Commit the fix as a new, follow-up commit instead.", hash)
+	tip := kase == driftUnpushedHead
+	where := "unpushed, still the tip"
+	if !tip {
+		where = "unpushed, but no longer the tip"
 	}
-	return b.String()
+	fold, ok := id.FoldCommand(hash, tip)
+	if !ok {
+		return fmt.Sprintf("Then fold it into %s (%s). %s has no single command that folds below the tip: fold it by hand, or commit the fix as a follow-up commit.",
+			hash, where, id.Name())
+	}
+	return fmt.Sprintf("Then fold it into %s (%s):\n  %s", hash, where, fold)
 }

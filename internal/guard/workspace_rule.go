@@ -240,7 +240,7 @@ func (a *rulesAnswer) denyShort(ctx context.Context, call func() judgedCall, at 
 	case len(a.raised) > 0:
 		return denyRaised(a, call())
 	}
-	return a.loadFailure != nil && denyUnloadableCommit(a, call(), at)
+	return a.loadFailure != nil && denyUnloadableCommit(ctx, a, call(), at)
 }
 
 // denyRaised turns asked into a deny when a command rule raised and the call is a gated

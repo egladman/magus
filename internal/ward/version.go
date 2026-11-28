@@ -121,15 +121,23 @@ func RelinkAt(root string) string {
 	return strings.Replace(relinkCommand, " go ", fmt.Sprintf(" go -C %s ", shellWord(root)), 1)
 }
 
-// stampAt is the go-build run of the checkout at root by the ./magus the relink
-// put there, aimed with --root, and bare for root "". The relink stamps no version
-// and no build stamp, and the stale-binary rule reads an unstamped ./magus as
-// stale. The relinked binary carries the tree's contract, so it loads the magusfile.
+// stampScript links ./magus again with the build stamp hack/policy/stale.buzz
+// computes, the one go-build links. It runs no target, so no generated output
+// is rewritten. A stamp it cannot take fails the line and links nothing.
+const stampScript = `import "proc"; import "fs"; import "./hack/policy/stale" as stale; ` +
+	`fun main(args: [str]) > void !> any { var stamp = ""; ` +
+	`try { stamp = stale\buildStamp("."); } catch (err: any) { throw "the build stamp was not taken, so ./magus stays unstamped: {err}"; } ` +
+	`_ = proc\exec("go", args: ["build", "-trimpath", "-ldflags", "-X github.com/egladman/magus/internal/interp/bindings.buildStamp=" + stamp, "-o", "magus.build", "./cmd/magus"]); ` +
+	`fs\rename("magus.build", dst: "magus"); }`
+
+// stampAt is the stamping link of the checkout at root by the ./magus the
+// relink put there, aimed with -C, and bare for root "". The relink stamps
+// nothing, and the stale-binary rule reads an unstamped ./magus as stale.
 func stampAt(root string) string {
 	if root == "" {
-		return "./magus run go-build ."
+		return "GOEXPERIMENT=jsonv2 ./magus buzz -e " + shellWord(stampScript)
 	}
-	return fmt.Sprintf("%s --root %s run go-build .", shellWord(filepath.Join(root, "magus")), shellWord(root))
+	return fmt.Sprintf("GOEXPERIMENT=jsonv2 %s buzz -C %s -e %s", shellWord(filepath.Join(root, "magus")), shellWord(root), shellWord(stampScript))
 }
 
 // RelinkAndStampAt words the repair of the checkout at root: [RelinkAt], then

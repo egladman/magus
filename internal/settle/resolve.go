@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
@@ -254,17 +255,37 @@ func UnresolvedError(plan Plan) error {
 }
 
 // OwedByHand is `magus vcs resolve` with nothing conflicted. It runs, one run per
-// target, the regenerations the merge driver left owed, which `magus doctor` reports,
-// stages the result and clears the record. With nothing owed it says so.
-func OwedByHand(ctx context.Context, out io.Writer, m *magus.Magus, driver types.VCSDriver, defines func(path, target string) bool, run RunFunc) error {
-	done, err := Hook(ctx, m, vcs.HookOperation{}, defines, run)
+// target, what the branch's range against res.Base owes and what the merge driver
+// recorded, then clears the record. It stages nothing: it names the backend's review
+// command and the fold the outputs take. With nothing owed it says so.
+func OwedByHand(ctx context.Context, out io.Writer, m *magus.Magus, res types.VCSResolution, defines func(path, target string) bool, run RunFunc) error {
+	generates := func(project string) bool { return defines(project, "generate") }
+	owed, err := changeset.RegenerationOwed(ctx, m.Root(), res.VCS, res.Base, m.ClassifyFiles, generates)
+	if err != nil {
+		return fmt.Errorf("vcs resolve: what the branch owes is unknown: %w", err)
+	}
+	recorded, err := vcs.OwedRegenerations(ctx, m.Root())
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
-	if len(done.Ran) == 0 {
-		fmt.Fprintln(out, "vcs resolve: nothing to resolve; no conflicted paths and no regeneration owed")
+	ran := Invocations(owed.Owed.Projects, recorded, defines)
+	if len(ran) == 0 {
+		fmt.Fprintf(out, "vcs resolve: nothing to resolve; no conflicted paths, no recorded regeneration, and %s..%s owes none\n", owed.Owed.Base, owed.Owed.Head)
 		return nil
 	}
-	fmt.Fprintf(out, "vcs resolve: ran %s; staged %d regenerated file(s): %s\n", done.Command(), len(done.Staged), driver.ReviewCommand())
+	runs := make([]string, len(ran))
+	for i, inv := range ran {
+		if err := run(ctx, inv); err != nil {
+			return fmt.Errorf("vcs resolve: %s: %w", hint.Run.With(inv...), err)
+		}
+		runs[i] = hint.Run.With(inv...)
+	}
+	if err := vcs.DropOwedRegenerations(ctx, m.Root(), recorded); err != nil {
+		return fmt.Errorf("vcs resolve: %w", err)
+	}
+	fmt.Fprintf(out, "vcs resolve: ran %s; review it with %s\n", strings.Join(runs, " && "), res.VCS.ReviewCommand())
+	if owed.Fold != "" {
+		fmt.Fprintln(out, owed.Fold)
+	}
 	return nil
 }

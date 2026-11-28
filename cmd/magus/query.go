@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/graph/workspacegraph"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/interp/replay"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
@@ -962,7 +963,48 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		slog.ErrorContext(ctx, string(msg), attr.Notice(""), attr.Component("magus query output"))
 		noticeFailedNeed(ctx, desc)
 	}
+	if err == nil && recordsCalls(desc.Target) {
+		var calls strings.Builder
+		writeRecordedCalls(&calls, filepath.Join(m.CacheDir(), "replay"), desc.Ref)
+		slog.InfoContext(ctx, strings.TrimSpace(calls.String()), attr.Notice(""), attr.Component("magus query output"))
+	}
 	return err
+}
+
+// shownCalls bounds the calls `query output` prints for a recorded buzz run. The last
+// ones are shown, since a run that failed or stopped did so at its end.
+const shownCalls = 20
+
+// recordsCalls reports whether a stored run's target is a `magus buzz --record` run,
+// which keeps a replay log. A `buzz -t` run is stored too and keeps none.
+func recordsCalls(target string) bool {
+	return strings.HasPrefix(target, "buzz ") && !strings.HasPrefix(target, "buzz -t ")
+}
+
+// writeRecordedCalls writes the last shownCalls calls of ref's replay log under dir,
+// marking an open one, and names the log's path for the rest. The caller logs it as a
+// notice, so stdout stays what the run wrote.
+func writeRecordedCalls(w io.Writer, dir, ref string) {
+	path := filepath.Join(dir, ref, "calls.jsonl")
+	h, calls, err := replay.Read(dir, ref)
+	if err != nil {
+		fmt.Fprintf(w, "\ncalls: none read from %s: %v\n", path, err)
+		return
+	}
+	shown := calls[max(0, len(calls)-shownCalls):]
+	fmt.Fprintf(w, "\ncalls: %d recorded for %s, the last %d shown; all of them are in %s\n", len(calls), h.Script, len(shown), path)
+	for _, c := range shown {
+		end := string(c.End)
+		switch {
+		case c.End == "open":
+			end = "open  <- the run stopped inside this call"
+		case c.Error != "":
+			end += ": " + c.Error
+		case c.Unencodable != "":
+			end += ", unencodable: " + c.Unencodable
+		}
+		fmt.Fprintf(w, "  #%-5d %-28s %s\n", c.Seq, c.Name, end)
+	}
 }
 
 func publishOutputRef(ctx context.Context, m *magus.Magus, ref string) error {

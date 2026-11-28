@@ -2323,6 +2323,72 @@ func (_c *MockVCSDriver_FindCommit_Call) RunAndReturn(run func(ctx context.Conte
 	return _c
 }
 
+// FoldCommand provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) FoldCommand(rev string, tip bool) (string, bool) {
+	ret := _mock.Called(rev, tip)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FoldCommand")
+	}
+
+	var r0 string
+	var r1 bool
+	if returnFunc, ok := ret.Get(0).(func(string, bool) (string, bool)); ok {
+		return returnFunc(rev, tip)
+	}
+	if returnFunc, ok := ret.Get(0).(func(string, bool) string); ok {
+		r0 = returnFunc(rev, tip)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(string, bool) bool); ok {
+		r1 = returnFunc(rev, tip)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+	return r0, r1
+}
+
+// MockVCSDriver_FoldCommand_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FoldCommand'
+type MockVCSDriver_FoldCommand_Call struct {
+	*mock.Call
+}
+
+// FoldCommand is a helper method to define mock.On call
+//   - rev string
+//   - tip bool
+func (_e *MockVCSDriver_Expecter) FoldCommand(rev interface{}, tip interface{}) *MockVCSDriver_FoldCommand_Call {
+	return &MockVCSDriver_FoldCommand_Call{Call: _e.mock.On("FoldCommand", rev, tip)}
+}
+
+func (_c *MockVCSDriver_FoldCommand_Call) Run(run func(rev string, tip bool)) *MockVCSDriver_FoldCommand_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		var arg1 bool
+		if args[1] != nil {
+			arg1 = args[1].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_FoldCommand_Call) Return(cmd string, ok bool) *MockVCSDriver_FoldCommand_Call {
+	_c.Call.Return(cmd, ok)
+	return _c
+}
+
+func (_c *MockVCSDriver_FoldCommand_Call) RunAndReturn(run func(rev string, tip bool) (string, bool)) *MockVCSDriver_FoldCommand_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GeneratedPaths provides a mock function for the type MockVCSDriver
 func (_mock *MockVCSDriver) GeneratedPaths(ctx context.Context, root string, rev string, paths []string) (map[string]bool, error) {
 	ret := _mock.Called(ctx, root, rev, paths)
@@ -3497,6 +3563,61 @@ func (_c *MockVCSDriver_Name_Call) Return(s string) *MockVCSDriver_Name_Call {
 }
 
 func (_c *MockVCSDriver_Name_Call) RunAndReturn(run func() string) *MockVCSDriver_Name_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// OperationCommands provides a mock function for the type MockVCSDriver
+func (_mock *MockVCSDriver) OperationCommands() ([]types.OperationCommand, bool) {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for OperationCommands")
+	}
+
+	var r0 []types.OperationCommand
+	var r1 bool
+	if returnFunc, ok := ret.Get(0).(func() ([]types.OperationCommand, bool)); ok {
+		return returnFunc()
+	}
+	if returnFunc, ok := ret.Get(0).(func() []types.OperationCommand); ok {
+		r0 = returnFunc()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]types.OperationCommand)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func() bool); ok {
+		r1 = returnFunc()
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+	return r0, r1
+}
+
+// MockVCSDriver_OperationCommands_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OperationCommands'
+type MockVCSDriver_OperationCommands_Call struct {
+	*mock.Call
+}
+
+// OperationCommands is a helper method to define mock.On call
+func (_e *MockVCSDriver_Expecter) OperationCommands() *MockVCSDriver_OperationCommands_Call {
+	return &MockVCSDriver_OperationCommands_Call{Call: _e.mock.On("OperationCommands")}
+}
+
+func (_c *MockVCSDriver_OperationCommands_Call) Run(run func()) *MockVCSDriver_OperationCommands_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockVCSDriver_OperationCommands_Call) Return(cmds []types.OperationCommand, stops bool) *MockVCSDriver_OperationCommands_Call {
+	_c.Call.Return(cmds, stops)
+	return _c
+}
+
+func (_c *MockVCSDriver_OperationCommands_Call) RunAndReturn(run func() ([]types.OperationCommand, bool)) *MockVCSDriver_OperationCommands_Call {
 	_c.Call.Return(run)
 	return _c
 }

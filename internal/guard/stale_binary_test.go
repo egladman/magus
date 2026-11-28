@@ -1291,3 +1291,38 @@ func (s *MainRefreshSuite) TestTheRefreshLinesChangeNothingTheStaleBinaryHolds()
 	}
 	s.True(commandCall(ctx, commandRuleInput{command: pull, dialect: DialectBash, lease: "w1"}, at).changes, "a worker's pull")
 }
+
+// VCSRecoveryLineSuite pins that the lines moving a stopped operation on come from each
+// backend's driver, not from a list of git's.
+type VCSRecoveryLineSuite struct{ suite.Suite }
+
+func TestVCSRecoveryLineSuite(t *testing.T) { suite.Run(t, new(VCSRecoveryLineSuite)) }
+
+func (s *VCSRecoveryLineSuite) TestAnHgRebaseContinueRecovers() {
+	s.True(vcsRecoveryLine([]string{"hg", "rebase", "--continue"}))
+}
+
+func (s *VCSRecoveryLineSuite) TestAnHgHisteditAbortRecovers() {
+	s.True(vcsRecoveryLine([]string{"hg", "histedit", "--abort"}))
+}
+
+func (s *VCSRecoveryLineSuite) TestASaplingGraftContinueRecovers() {
+	s.True(vcsRecoveryLine([]string{"/usr/local/bin/sl", "graft", "--continue"}))
+}
+
+func (s *VCSRecoveryLineSuite) TestAGitMergeSkipIsNotACommand() {
+	s.False(vcsRecoveryLine([]string{"git", "merge", "--skip"}))
+}
+
+func (s *VCSRecoveryLineSuite) TestAnHgRebaseSkipIsNotACommand() {
+	s.False(vcsRecoveryLine([]string{"hg", "rebase", "--skip"}))
+}
+
+// jj never stops, so no jj line moves an operation on.
+func (s *VCSRecoveryLineSuite) TestNoJJLineRecovers() {
+	s.False(vcsRecoveryLine([]string{"jj", "rebase", "--continue"}))
+}
+
+func (s *VCSRecoveryLineSuite) TestAGitCherryPickSeriesStillRecovers() {
+	s.True(vcsRecoveryLine([]string{"git", "cherry-pick", "abc123"}))
+}

@@ -38,6 +38,38 @@ func (v gitVCS) Base() string     { return "origin/main" }
 // with a staging area between the working copy and a commit.
 func (v gitVCS) ReviewCommand() string { return "git diff --cached --stat" }
 
+// gitOperationSteps are the flags each git operation stops for. A merge has no --skip.
+var gitOperationSteps = []struct {
+	op    string
+	steps []string
+}{
+	{types.OperationCherryPick, []string{types.OperationContinue, types.OperationSkip, types.OperationAbort}},
+	{types.OperationMerge, []string{types.OperationContinue, types.OperationAbort}},
+	{types.OperationRebase, []string{types.OperationContinue, types.OperationSkip, types.OperationAbort}},
+	{types.OperationRevert, []string{types.OperationContinue, types.OperationSkip, types.OperationAbort}},
+}
+
+// OperationCommands implements types.VCSIdentity. git names each operation's
+// subcommand after the operation.
+func (v gitVCS) OperationCommands() ([]types.OperationCommand, bool) {
+	var cmds []types.OperationCommand
+	for _, o := range gitOperationSteps {
+		for _, step := range o.steps {
+			cmds = append(cmds, types.OperationCommand{Op: o.op, Step: step, Argv: []string{"git", o.op, "--" + step}})
+		}
+	}
+	return cmds, true
+}
+
+// FoldCommand implements types.VCSIdentity. Below the tip a plain amend rewrites the
+// wrong commit, so a fixup is folded by an autosquash rebase that opens no editor.
+func (v gitVCS) FoldCommand(rev string, tip bool) (string, bool) {
+	if tip {
+		return "git commit --amend --no-edit", true
+	}
+	return fmt.Sprintf("git commit --fixup=%s && GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash %s^", rev, rev), true
+}
+
 // ParentRef is the first parent of the checked-out commit. `^` rather than `~1`:
 // they are the same for a linear commit and differ on a merge, where `^` is the
 // branch being merged INTO, which is the side a CI run wants to measure from.

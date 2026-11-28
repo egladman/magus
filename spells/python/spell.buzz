@@ -61,6 +61,23 @@ export fun mgs_getLanguage() > Language {
             },
             operators = ["==", "!=", "<=", ">=", "**", "//", "->", ":=", "+=", "-="],
             decisions = DecisionSyntax{keywords = ["if", "elif", "for", "while", "except", "and", "or", "case"]},
+            encodings = [
+                Encoding{
+                    name = "ident",
+                    pattern = "^[\\p\{L}_][\\p\{L}\\p\{Nd}_]*$",
+                    reserved = ["False", "None", "True", "and", "as", "assert", "async", "await", "break",
+                                "class", "continue", "def", "del", "elif", "else", "except", "finally",
+                                "for", "from", "global", "if", "import", "in", "is", "lambda", "nonlocal",
+                                "not", "or", "pass", "raise", "return", "try", "while", "with", "yield"],
+                },
+                Encoding{
+                    name = "string", open = "\"", close = "\"",
+                    escapes = [Escape{text = "\\", to = "\\\\"}, Escape{text = "\"", to = "\\\""},
+                               Escape{text = "\n", to = "\\n"}, Escape{text = "\r", to = "\\r"},
+                               Escape{text = "\t", to = "\\t"}],
+                    control = "\\x\{hex2}",
+                },
+            ],
         },
     };
 }

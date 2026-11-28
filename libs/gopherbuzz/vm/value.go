@@ -174,6 +174,9 @@ type directObj struct {
 	Name     string
 	Fn       Callable
 	captures []Value
+	// intercept marks a native registered by an embedder, the only kind a
+	// CallInterceptor sees. newDirect's builtin methods leave it false.
+	intercept bool
 }
 type objectInst struct {
 	Def           *objectDefObj
@@ -483,16 +486,23 @@ func (vm *VM) listValue(items []Value, mut bool) Value {
 }
 
 // DirectValue wraps a Go Callable as a Buzz function value bound to name.
+// A call to it reaches the VM's CallInterceptor, if one is installed.
 func DirectValue(name string, fn Callable) Value {
-	return heapValue(tagDirect, newDirect(name, fn))
+	return heapValue(tagDirect, &directObj{Name: name, Fn: fn, intercept: true})
 }
 
 // DirectClosure keeps the Buzz values captured by a host callable reachable
-// when Buzz stores or returns the callable independently of its creator.
+// when Buzz stores or returns the callable independently of its creator. Like
+// DirectValue, a call to it reaches the VM's CallInterceptor.
 func DirectClosure(name string, fn Callable, captures ...Value) Value {
-	direct := newDirect(name, fn)
-	direct.captures = captures
-	return heapValue(tagDirect, direct)
+	return heapValue(tagDirect, &directObj{Name: name, Fn: fn, captures: captures, intercept: true})
+}
+
+// BuiltinValue wraps fn as a function the language provides, such as resume
+// or resolve. Unlike DirectValue, a call to it never reaches a CallInterceptor:
+// it runs Buzz code rather than reading the world outside the VM.
+func BuiltinValue(name string, fn Callable) Value {
+	return heapValue(tagDirect, newDirect(name, fn))
 }
 
 // newDirect builds the callable a builtin method dispatches to WITHOUT giving it
@@ -646,6 +656,44 @@ func (v Value) NativePayload(key *NativePayloadKey) (Value, bool) {
 		return Null, false
 	}
 	return payload.value, true
+}
+
+// HasNativePayload reports whether v is an instance carrying a native payload under any
+// key. NativePayload answers only to the key its module issued, so a serializer needs
+// this to refuse what it cannot hold.
+func (v Value) HasNativePayload() bool {
+	return v.IsObject() && v.asObject().nativePayload != nil
+}
+
+// SuspendedValue returns the value a native passed to [Suspend] when err is that
+// signal. A CallInterceptor needs it to tell a suspension from a failure.
+func SuspendedValue(err error) (Value, bool) {
+	ys, ok := err.(*yieldSignal)
+	if !ok {
+		return Null, false
+	}
+	return ys.value, true
+}
+
+// ObjectFieldNames returns the field names, in declaration order, of an object type or an
+// instance, and nil for anything else. A caller rebuilding an instance from saved fields
+// checks them against the type's current declaration.
+func (v Value) ObjectFieldNames() []string {
+	var def *objectDefObj
+	switch v.tag() {
+	case tagObjectDef:
+		def = v.asObjectDef()
+	case tagObject:
+		def = v.asObject().Def
+	}
+	if def == nil {
+		return nil
+	}
+	names := make([]string, len(def.Fields))
+	for i, f := range def.Fields {
+		names[i] = f.Name
+	}
+	return names
 }
 
 // ForeignStructTypes returns the C field type spellings of a zdef-declared struct

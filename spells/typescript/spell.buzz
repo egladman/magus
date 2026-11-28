@@ -120,6 +120,25 @@ export fun mgs_getLanguage() > Language {
             },
             operators = ["===", "!==", "==", "!=", "<=", ">=", "&&", "||", "??", "??=", "?.", "=>", "++", "--", "**", "...", "+=", "-="],
             decisions = DecisionSyntax{keywords = ["if", "for", "while", "case", "catch"], operators = ["&&", "||", "??", "??=", "?"]},
+            encodings = [
+                Encoding{
+                    name = "ident",
+                    pattern = "^[\\p\{L}_$][\\p\{L}\\p\{Nd}_$]*$",
+                    reserved = ["await", "break", "case", "catch", "class", "const", "continue", "debugger",
+                                "default", "delete", "do", "else", "enum", "export", "extends", "false",
+                                "finally", "for", "function", "if", "implements", "import", "in",
+                                "instanceof", "interface", "let", "new", "null", "package", "private",
+                                "protected", "public", "return", "static", "super", "switch", "this",
+                                "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield"],
+                },
+                Encoding{
+                    name = "string", open = "\"", close = "\"",
+                    escapes = [Escape{text = "\\", to = "\\\\"}, Escape{text = "\"", to = "\\\""},
+                               Escape{text = "\n", to = "\\n"}, Escape{text = "\r", to = "\\r"},
+                               Escape{text = "\t", to = "\\t"}],
+                    control = "\\x\{hex2}",
+                },
+            ],
         },
     };
 }

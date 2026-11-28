@@ -76,6 +76,9 @@ Print where compile and import time went, after the script runs
 \fB\-\-[no\-]record\fR (default: off)
 Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (magus query output <ref> reopens it)
 .TP
+\fB\-\-[no\-]restart\fR (default: off)
+With \-\-record, discard the replay log of this run and start from the top, instead of resuming a run that died
+.TP
 \fB\-t\fR
 Run the test "..." {} blocks of every script given and report pass/fail
 .TP

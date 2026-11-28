@@ -771,7 +771,6 @@ export object Job {
     dependsOn: [str] = [],
     integrates: [str] = [],
     breaks: [str] = [],
-    creates: [str] = [],
     modelTier: magus\agent\JobModelTier? = null,
     briefFormat: BriefFormat = BriefFormat.none,
     delivery: str = "",
@@ -887,10 +886,6 @@ export object Workspace {
 
     fun forkFacts() > JobForkFacts !> any {
         return magus__Workspace__forkFacts(this);
-    }
-
-    fun newDirs(writes: [str]) > NewDirs !> any {
-        return magus__Workspace__newDirs(this, writes: writes);
     }
 
     fun unmerged() > JobUnmergedReport !> any {
@@ -1082,16 +1077,6 @@ export object JobForkFacts {
     lastTestRef: str = "",
     lastTestRevision: str = "",
     testUnknown: str = "",
-}
-
-export object NewDir {
-    dir: str = "",
-    neighbors: [str] = [],
-}
-
-export object NewDirs {
-    dirs: [NewDir] = [],
-    unknown: str = "",
 }
 
 export object UnverifiedFile {
@@ -2777,7 +2762,6 @@ extern fun magus__Workspace__jobs(recv: Workspace) > JobList !> any;
 extern fun magus__Workspace__putJob(recv: Workspace, id: str, opts: {str: any} = {<str: any>}) > Job !> any;
 extern fun magus__Workspace__clearJobs(recv: Workspace) > int !> any;
 extern fun magus__Workspace__forkFacts(recv: Workspace) > JobForkFacts !> any;
-extern fun magus__Workspace__newDirs(recv: Workspace, writes: [str]) > NewDirs !> any;
 extern fun magus__Workspace__unmerged(recv: Workspace) > JobUnmergedReport !> any;
 extern fun magus__Workspace__unverified(recv: Workspace, revision: str) > UnverifiedReport !> any;
 extern fun magus__Workspace__tierOutcomes(recv: Workspace) > ModelTiers !> any;
@@ -2932,8 +2916,6 @@ export object guard {
     static extern fun step(kind: str, rule: fun (req: magus\agent\StepRequest) > GuardVerdict !> any) > void;
     /// Register the one function the agent guard calls when an agent ends its turn, on the host's Stop and SubagentStop events, after the built-in stop check lets the stop through: fun(req: StopRequest) > GuardVerdict. Its deny refuses the stop through the host's own reply, so the agent keeps working; its advise is told beside the stop. Declared at the top level of the root magusfile, once. Strengthen only and evaluated from both the committed and the working-tree sources, exactly as guard.command is; a rule that fails lets the stop through and says so, since refusing on a broken rule would hold the session open. Registering twice, from another project, or with a non-function is MGS1045. magus ships no rule.
     static extern fun stop(rule: fun (req: StopRequest) > GuardVerdict !> any) > void;
-    /// Keeps value as key's last value in the calling agent's session and returns the one it replaces, "" the first time. Only callable inside a spawn, command, write or stop rule while the guard runs it.
-    static extern fun swap(key: str, value: str) > str;
     /// Register the one function the agent guard calls on every file an agent writes through its host's edit tools: fun(req: WriteRequest) > GuardVerdict. Declared at the top level of the root magusfile, once. Strengthen only, fails open, and is evaluated from both the committed and the working-tree sources, exactly as guard.command is. Registering twice, from another project, or with a non-function is MGS1045. magus ships no rule.
     static extern fun write(rule: fun (req: WriteRequest) > GuardVerdict !> any) > void;
 }
