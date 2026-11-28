@@ -1,0 +1,20 @@
+{{hole}}
+package {{testPkg:ident}}
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/suite"
+
+	{{importPath:string}}
+)
+
+type {{suite:ident}} struct {
+	suite.Suite
+}
+
+func {{entry:ident}}(t *testing.T) {
+	suite.Run(t, new({{suite:ident}}))
+}
+
+{{cases:block}}

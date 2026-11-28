@@ -1,0 +1,16 @@
+import "emit";
+import "std";
+
+fun main(args: [str]) > void !> any {
+    // Holes built in Buzz: each names its encoding, and join writes the separator.
+    final names = emit\join([
+        emit\hole("Round", spec: "ident", expression: "first"),
+        emit\hole("Zero", spec: "ident", expression: "second"),
+    ], sep: ", ");
+    final line = emit\join([emit\text("var _ = []any\{"), names, emit\text("}\n")], sep: "");
+
+    final text = emit\render(line, path: "price/names.go");
+    if (text.error -> err) { throw err.message; }
+    std\print(text.value!);
+    // -> "var _ = []any{Round, Zero}\n"
+}

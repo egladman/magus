@@ -1711,6 +1711,39 @@ func decodeEditedFile(v vm.Value, path string) (types.EditedFile, error) {
 	return out, nil
 }
 
+// DecodeEmitFile decodes a Buzz EmitFile, an object instance or a map, into a types.EmitFile.
+func DecodeEmitFile(v vm.Value) (types.EmitFile, error) {
+	return decodeEmitFile(v, "emitFile")
+}
+
+func decodeEmitFile(v vm.Value, path string) (types.EmitFile, error) {
+	var out types.EmitFile
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "EmitFile", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "path":
+			sPath, err := decodeString(item, path+".path")
+			if err != nil {
+				return out, err
+			}
+			out.Path = sPath
+		case "template":
+			xTemplate, err := decodeTemplate(item, path+".template")
+			if err != nil {
+				return out, err
+			}
+			out.Template = xTemplate
+		default:
+			return out, unknownMember(path, "EmitFile", key)
+		}
+	}
+	return out, nil
+}
+
 // DecodeEncoding decodes a Buzz Encoding, an object instance or a map, into a spells.Encoding.
 func DecodeEncoding(v vm.Value) (spells.Encoding, error) {
 	return decodeEncoding(v, "encoding")
@@ -2943,6 +2976,51 @@ func decodeInstall(v vm.Value, path string) (spells.Install, error) {
 			out.Tools = strsTools
 		default:
 			return out, unknownMember(path, "Install", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeInterpolation decodes a Buzz Interpolation, an object instance or a map, into a types.Interpolation.
+func DecodeInterpolation(v vm.Value) (types.Interpolation, error) {
+	return decodeInterpolation(v, "interpolation")
+}
+
+func decodeInterpolation(v vm.Value, path string) (types.Interpolation, error) {
+	var out types.Interpolation
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Interpolation", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "value":
+			aValue, err := decodeAny(item, path+".value")
+			if err != nil {
+				return out, err
+			}
+			out.Value = aValue
+		case "expression":
+			sExpression, err := decodeString(item, path+".expression")
+			if err != nil {
+				return out, err
+			}
+			out.Expression = sExpression
+		case "conversion":
+			sConversion, err := decodeString(item, path+".conversion")
+			if err != nil {
+				return out, err
+			}
+			out.Conversion = sConversion
+		case "formatSpec":
+			sFormatSpec, err := decodeString(item, path+".formatSpec")
+			if err != nil {
+				return out, err
+			}
+			out.FormatSpec = sFormatSpec
+		default:
+			return out, unknownMember(path, "Interpolation", key)
 		}
 	}
 	return out, nil
@@ -8468,6 +8546,55 @@ func decodeSyntax(v vm.Value, path string) (spells.Syntax, error) {
 			}
 		default:
 			return out, unknownMember(path, "Syntax", key)
+		}
+	}
+	return out, nil
+}
+
+// DecodeTemplate decodes a Buzz Template, an object instance or a map, into a types.Template.
+func DecodeTemplate(v vm.Value) (types.Template, error) {
+	return decodeTemplate(v, "template")
+}
+
+func decodeTemplate(v vm.Value, path string) (types.Template, error) {
+	var out types.Template
+	fields, ok := v.MapView()
+	if !ok {
+		return out, mismatch(path, "Template", v)
+	}
+	for _, key := range fields.MapKeys() {
+		item, _ := fields.MapGet(key)
+		switch key {
+		case "strings":
+			strsStrings, err := decodeStringList(item, path+".strings")
+			if err != nil {
+				return out, err
+			}
+			out.Strings = strsStrings
+		case "interpolations":
+			listInterpolations, err := decodeList(item, path+".interpolations", "[Interpolation]")
+			if err != nil {
+				return out, err
+			}
+			if len(listInterpolations) > 0 {
+				itemsInterpolations := make([]types.Interpolation, len(listInterpolations))
+				for indexInterpolations, itemInterpolations := range listInterpolations {
+					xInterpolationsItem, err := decodeInterpolation(itemInterpolations, fmt.Sprintf("%s[%d]", path+".interpolations", indexInterpolations))
+					if err != nil {
+						return out, err
+					}
+					itemsInterpolations[indexInterpolations] = xInterpolationsItem
+				}
+				out.Interpolations = itemsInterpolations
+			}
+		case "source":
+			sSource, err := decodeString(item, path+".source")
+			if err != nil {
+				return out, err
+			}
+			out.Source = sSource
+		default:
+			return out, unknownMember(path, "Template", key)
 		}
 	}
 	return out, nil
