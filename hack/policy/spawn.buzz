@@ -511,10 +511,101 @@ fun describeTest(counts: ForkCounts) > str {
     return "{counts.commitsSinceTest} commit(s) since the last full test, {counts.lastTest}";
 }
 
-// decideForkLine judges the forks on a line. facts runs once, and only for a
-// fork that could be refused.
+// The roots under which a new directory is a package someone must name. A new
+// directory elsewhere, docs/ and hack/ among them, is reported and never refused.
+export final packageRoots = ["internal", "libs", "cmd", "std", "types"];
+
+// ForkDir is one directory a fork's write paths would create, copied out of
+// magus\workspace().newDirs() like ForkCounts: neighbors share a word with its name.
+export object ForkDir {
+    dir: str,
+    neighbors: [str] = [],
+}
+
+// ForkDirs is what the rule reads of magus\workspace().newDirs(). unknown says
+// why the measure went unread, and dirs is then empty without meaning none.
+export object ForkDirs {
+    dirs: [ForkDir] = [],
+    unknown: str = "",
+}
+
+// unmeasured is the measure a caller that passes none gets: unknown, so the
+// fork is reported as unmeasured rather than read as creating nothing.
+fun unmeasured(writes: [str]) > ForkDirs {
+    return ForkDirs{ unknown = "the guard passed no measure of new directories to decideForkLine" };
+}
+
+// decideForkDirs refuses a fork whose write paths create a directory under a
+// package root that its record does not list in creates. magus measures; this
+// file decides, so a new directory refused here is this repository's call.
+export fun decideForkDirs(fork: mandate\Fork, measured: ForkDirs) > GuardVerdict {
+    if (!fork.known) {
+        return magus\guard.advise("this fork's record could not be read, so the directories it creates went unmeasured");
+    }
+    if (measured.unknown != "") {
+        return magus\guard.advise("new directories: unknown, {measured.unknown}; so nothing was refused for a name no one picked");
+    }
+    final refused = mut [<str>];
+    final reported = mut [<str>];
+    foreach (d in measured.dirs) {
+        if (!underPackageRoot(d.dir) or approved(d.dir, creates: fork.creates)) {
+            reported.append(d.dir);
+            continue;
+        }
+        final near = if (d.neighbors.len() > 0) d.neighbors.join(", ") else "none";
+        refused.append("this fork creates a package no one picked: {d.dir} has no dir node\n"
+            + "directories that already hold these words: {near}\n"
+            + "Move the write paths into one of them, or ask the owner for the name and fork again with `\"creates\": [\"{d.dir}\"]`.");
+    }
+    if (refused.len() > 0) {
+        return magus\guard.deny(refused.join("\n"));
+    }
+    if (reported.len() > 0) {
+        return magus\guard.advise("this fork creates {reported.join(", ")}: outside the package roots or listed in creates, so it is reported, not refused");
+    }
+    return magus\guard.defer();
+}
+
+fun underPackageRoot(dir: str) > bool {
+    foreach (root in packageRoots) {
+        if (dir.startsWith("{root}/")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// approved reports whether creates lists dir or a directory above it, since a
+// named package's own subdirectories need no second name.
+fun approved(dir: str, creates: [str]) > bool {
+    foreach (c in creates) {
+        final named = if (c.endsWith("/")) c.sub(0, len: c.len() - 1) else c;
+        if (dir == named or dir.startsWith("{named}/")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// decideForkLine is judgeForks with no measure of new directories, so each
+// writing fork is noted as unmeasured until guard.buzz passes newDirs.
 export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (path: str) > str, facts: fun () > ForkCounts, limit: int) > GuardVerdict {
+    return judgeForks(programs, line: line, read: read, facts: facts, limit: limit, dirs: unmeasured);
+}
+
+// judgeForks judges the forks on a line. facts runs once, and only for a
+// fork that could be refused. dirs runs per known fork that writes and does not
+// integrate, whose write paths came from its branches. A refusal wins; notes join.
+export fun judgeForks(
+    programs: [helpers\Program],
+    line: str,
+    read: fun (path: str) > str,
+    facts: fun () > ForkCounts,
+    limit: int,
+    dirs: fun (writes: [str]) > ForkDirs,
+) > GuardVerdict {
     var counted: ForkCounts? = null;
+    final notes = mut [<str>];
     foreach (index, p in programs) {
         final ops = helpers\magusOperands(p.args);
         if (p.name != "magus" or ops.len() < 2 or ops[0] != "job" or ops[1] != "fork") {
@@ -524,6 +615,18 @@ export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (pat
             continue;
         }
         final fork = mandate\readFork(p, body: forkRecord(programs, at: index, line: line, read: read));
+        var named = magus\guard.defer();
+        if (!fork.known) {
+            named = decideForkDirs(fork, measured: ForkDirs{});
+        } else if (fork.integrates.len() == 0 and fork.writes.len() > 0) {
+            named = decideForkDirs(fork, measured: dirs(fork.writes));
+        }
+        if (named.decision == magus\GuardDecision.deny) {
+            return named;
+        }
+        if (named.decision != magus\GuardDecision.defer) {
+            notes.append(named.reason);
+        }
         if (fork.known and (fork.integrates.len() > 0 or fork.parent != "")) {
             continue;
         }
@@ -531,9 +634,15 @@ export fun decideForkLine(programs: [helpers\Program], line: str, read: fun (pat
             counted = facts();
         }
         final judged = decideFork(fork, counts: counted!, limit: limit);
-        if (judged.decision != magus\GuardDecision.defer) {
+        if (judged.decision == magus\GuardDecision.deny) {
             return judged;
         }
+        if (judged.decision != magus\GuardDecision.defer) {
+            notes.append(judged.reason);
+        }
+    }
+    if (notes.len() > 0) {
+        return magus\guard.advise(notes.join("\n"));
     }
     return magus\guard.defer();
 }

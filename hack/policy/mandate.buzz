@@ -379,12 +379,14 @@ fun jobVerb(p: helpers\Program) > [str] {
     return ops.sub(1);
 }
 
-// Fork is a `magus job fork` as the rule reads it: the row it declares, its parent, and the
-// rows it integrates, read from a --stdin record the line carries as a heredoc.
+// Fork is a `magus job fork` as the rule reads it: the row, its parent, what it integrates,
+// writes and may create. A --stdin fork is read from the heredoc the line carries.
 export object Fork {
     id: str,
     parent: str = "",
     integrates: [str] = [],
+    writes: [str] = [],
+    creates: [str] = [],
     // known is false for a --stdin fork whose record the line does not carry.
     known: bool = true,
 }
@@ -396,20 +398,38 @@ export fun readFork(p: helpers\Program, body: str) > Fork {
             "--check", "--checkout", "--checkpoint", "--model", "--timeout", "--brief-format"]);
         final named = helpers\magusOperands(ops);
         final id = if (named.len() > 2) named[2] else "";
-        return Fork{ id = id, parent = helpers\flagValue(p.args, long: "--parent", short: "") ?? "" };
+        final writes = mut [<str>];
+        foreach (w in (helpers\flagValue(p.args, long: "--write-paths", short: "") ?? "").split(",")) {
+            if (w.trim() != "") {
+                writes.append(w.trim());
+            }
+        }
+        return Fork{ id = id, parent = helpers\flagValue(p.args, long: "--parent", short: "") ?? "", writes = writes };
     }
     final doc: {str: any} = json\parse(body) catch {<str: any>};
     final id: str = doc["id"] ?? "";
     if (id == "") {
         return Fork{ id = "", known = false };
     }
-    final listed: [any] = doc["integrates"] ?? [<any>];
-    final integrates = mut [<str>];
-    foreach (i in listed) {
-        final name: str = i;
-        integrates.append(name);
+    final paths: {str: any} = doc["paths"] ?? {<str: any>};
+    return Fork{
+        id = id,
+        parent = doc["parent"] ?? "",
+        integrates = strings(doc["integrates"]),
+        writes = strings(paths["write"]),
+        creates = strings(doc["creates"]),
+    };
+}
+
+// strings is a record's list of names; an absent key is none.
+fun strings(value: any) > [str] {
+    final listed: [any] = value ?? [<any>];
+    final names = mut [<str>];
+    foreach (item in listed) {
+        final name: str = item;
+        names.append(name);
     }
-    return Fork{ id = id, parent = doc["parent"] ?? "", integrates = integrates };
+    return names;
 }
 
 // plainHeredocs are the bodies of every heredoc on line, in order, fed to a command

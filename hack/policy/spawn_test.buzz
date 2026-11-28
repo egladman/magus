@@ -1,0 +1,111 @@
+import "std";
+import "magus";
+import "./hack/policy/helpers" as helpers;
+import "./hack/policy/mandate" as mandate;
+import "./hack/policy/spawn" as spawn;
+import "./hack/policy/verdict" as verdict;
+
+fun hostcall() > spawn\ForkDirs {
+    return spawn\ForkDirs{ dirs = [spawn\ForkDir{ dir = "internal/hostcall", neighbors = ["internal/host", "libs/callgraph"] }] };
+}
+
+fun writing(creates: [str] = []) > mandate\Fork {
+    return mandate\Fork{ id = "next", writes = ["internal/hostcall/call.go"], creates = creates };
+}
+
+fun fewCounts() > spawn\ForkCounts {
+    return spawn\ForkCounts{};
+}
+
+fun noFile(path: str) > str {
+    return "";
+}
+
+test "a fork creating a package no one picked is refused, naming its neighbours and the repair" {
+    final v = verdict\checked(spawn\decideForkDirs(writing(), measured: hostcall()), label: "new package");
+    std\assert(v.decision == magus\GuardDecision.deny, message: v.reason);
+    foreach (want in [
+        "this fork creates a package no one picked: internal/hostcall has no dir node",
+        "directories that already hold these words: internal/host, libs/callgraph",
+        "Move the write paths into one of them, or ask the owner for the name",
+        "`\"creates\": [\"internal/hostcall\"]`",
+    ]) {
+        std\assert(v.reason.indexOf(want) != null, message: "{want} in {v.reason}");
+    }
+}
+
+test "a directory the record lists in creates, or one below it, is reported, not refused" {
+    final listed = spawn\decideForkDirs(writing(creates: ["internal/hostcall"]), measured: hostcall());
+    std\assert(listed.decision == magus\GuardDecision.advise, message: listed.reason);
+    final below = spawn\ForkDirs{ dirs = [spawn\ForkDir{ dir = "internal/hostcall/wire" }] };
+    std\assert(spawn\decideForkDirs(writing(creates: ["internal/hostcall/"]), measured: below).decision == magus\GuardDecision.advise, message: "a subdirectory of a named one");
+    std\assert(spawn\decideForkDirs(writing(creates: ["internal/host"]), measured: hostcall()).decision == magus\GuardDecision.deny, message: "a prefix that is not a parent names nothing");
+}
+
+test "every package root refuses and docs or hack only report" {
+    foreach (root in spawn\packageRoots) {
+        final measured = spawn\ForkDirs{ dirs = [spawn\ForkDir{ dir = "{root}/fresh" }] };
+        std\assert(spawn\decideForkDirs(writing(), measured: measured).decision == magus\GuardDecision.deny, message: root);
+    }
+    foreach (dir in ["docs/fresh", "hack/fresh", "internal"]) {
+        final measured = spawn\ForkDirs{ dirs = [spawn\ForkDir{ dir = dir }] };
+        final v = spawn\decideForkDirs(writing(), measured: measured);
+        std\assert(v.decision == magus\GuardDecision.advise and v.reason.indexOf(dir) != null, message: "{dir}: {v.reason}");
+    }
+}
+
+test "an unknown measure is reported with its reason and never refuses" {
+    final v = spawn\decideForkDirs(writing(), measured: spawn\ForkDirs{ unknown = "the knowledge graph would not load" });
+    std\assert(v.decision == magus\GuardDecision.advise, message: v.reason);
+    std\assert(v.reason.indexOf("new directories: unknown, the knowledge graph would not load") != null, message: v.reason);
+    final unread = spawn\decideForkDirs(mandate\Fork{ id = "", known = false }, measured: spawn\ForkDirs{});
+    std\assert(unread.decision == magus\GuardDecision.advise, message: "an unread record is noted");
+}
+
+test "a fork creating nothing passes" {
+    std\assert(spawn\decideForkDirs(writing(), measured: spawn\ForkDirs{}).decision == magus\GuardDecision.defer, message: "no new directory");
+}
+
+test "a line measures each writing fork's paths, a child included, and reads creates from the record" {
+    final seen = mut [<str>];
+    final measure = fun (writes: [str]) > spawn\ForkDirs {
+        seen.append(writes.join(","));
+        return hostcall();
+    };
+    final counts = fun () > spawn\ForkCounts {
+        return fewCounts();
+    };
+    final child = helpers\Program{ name = "magus", args = ["job", "fork", "kid", "--parent", "next", "--write-paths", "internal/hostcall/a.go,internal/hostcall/b.go"], repeats = false };
+    final refused = spawn\judgeForks([child], line: "", read: noFile, facts: counts, limit: 10, dirs: measure);
+    std\assert(refused.decision == magus\GuardDecision.deny, message: refused.reason);
+    std\assert(seen.len() == 1 and seen[0] == "internal/hostcall/a.go,internal/hostcall/b.go", message: seen.join(" | "));
+
+    final record = "\{\"id\":\"next\",\"paths\":\{\"write\":[\"internal/hostcall/a.go\"]\},\"creates\":[\"internal/hostcall\"]\}";
+    final stdin = helpers\Program{ name = "magus", args = ["job", "fork", "--stdin"], repeats = false };
+    final named = spawn\judgeForks([stdin], line: "./magus job fork --stdin <<'EOF'\n{record}\nEOF", read: noFile, facts: counts, limit: 10, dirs: measure);
+    std\assert(named.decision == magus\GuardDecision.advise, message: named.reason);
+}
+
+test "a read-only or integrating fork is not measured" {
+    final measure = fun (writes: [str]) > spawn\ForkDirs {
+        std\assert(false, message: "measured {writes.join(",")}");
+        return spawn\ForkDirs{};
+    };
+    final counts = fun () > spawn\ForkCounts {
+        return fewCounts();
+    };
+    final readOnly = helpers\Program{ name = "magus", args = ["job", "fork", "look", "--read-only"], repeats = false };
+    std\assert(spawn\judgeForks([readOnly], line: "", read: noFile, facts: counts, limit: 10, dirs: measure).decision == magus\GuardDecision.defer, message: "read-only");
+    final record = "\{\"id\":\"land\",\"integrates\":[\"done-0\"],\"paths\":\{\"write\":[\"internal/hostcall/a.go\"]\}\}";
+    final stdin = helpers\Program{ name = "magus", args = ["job", "fork", "--stdin"], repeats = false };
+    std\assert(spawn\judgeForks([stdin], line: "./magus job fork --stdin <<'EOF'\n{record}\nEOF", read: noFile, facts: counts, limit: 10, dirs: measure).decision == magus\GuardDecision.defer, message: "integrates");
+}
+
+test "decideForkLine notes a writing fork as unmeasured rather than passing it silently" {
+    final counts = fun () > spawn\ForkCounts {
+        return fewCounts();
+    };
+    final fork = helpers\Program{ name = "magus", args = ["job", "fork", "next", "--write-paths", "internal/hostcall/a.go"], repeats = false };
+    final v = spawn\decideForkLine([fork], line: "", read: noFile, facts: counts, limit: 10);
+    std\assert(v.decision == magus\GuardDecision.advise and v.reason.indexOf("new directories: unknown") != null, message: v.reason);
+}
