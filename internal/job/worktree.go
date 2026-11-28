@@ -1010,14 +1010,27 @@ func digestCache(path string) (file.JSONL[binaryDigest], error) {
 	return file.NewJSONL(codec.JSONLConfig[binaryDigest]{Log: slog.With(attr.Component("magus")), Path: path, Perm: 0o644, Key: func(d binaryDigest) string { return d.Path }})
 }
 
-// PinRefusal says why the root's hook may not hand a call to bin, "" when it
-// may. It may when a live row's standing checkout records bin as its Binary
-// and bin still hashes to that row's BinaryDigest. unheld marks a refusal where
-// no live row works in bin's checkout at all, so no worker there chose bin.
-func (s *Store) PinRefusal(ctx context.Context, bin string) (why string, unheld bool, err error) {
+// Unpinned is why the root's hook may not hand a call to a binary on a row's
+// pin alone.
+type Unpinned struct {
+	// Why is the refusal, "" when a live row pins the binary.
+	Why string
+	// Unheld marks a refusal where no live row works in the binary's checkout
+	// at all, so no worker there chose it.
+	Unheld bool
+	// Holders are the live rows working in the binary's checkout when none
+	// records it. Their authorities are the commits the root approved there.
+	Holders []job.Job
+}
+
+// PinRefusal says why the root's hook may not hand a call to bin. It may when
+// a live row's standing checkout records bin as its Binary and bin still
+// hashes to that row's BinaryDigest. A recorded binary whose bytes moved
+// names no holders: its pin is the stronger record, so it stays refused.
+func (s *Store) PinRefusal(ctx context.Context, bin string) (Unpinned, error) {
 	rows, err := s.List(ctx)
 	if err != nil {
-		return "", false, err
+		return Unpinned{}, err
 	}
 	live := slices.DeleteFunc(rows, func(r job.Job) bool { return !r.State.Live() })
 	// Only a holder still editing works in a checkout. A row its holder left
@@ -1027,22 +1040,23 @@ func (s *Store) PinRefusal(ctx context.Context, bin string) (why string, unheld 
 	})
 	if len(pinning) == 0 {
 		checkout := filepath.Dir(bin)
-		editing := slices.DeleteFunc(slices.Clone(live), func(r job.Job) bool { return !Editing(r) })
-		if i := slices.IndexFunc(editing, func(r job.Job) bool {
-			return samePath(r.CheckoutRoot, checkout) || (r.Worktree.Standing() && samePath(r.Worktree.Root, checkout))
-		}); i >= 0 {
-			return fmt.Sprintf("job %s works in its checkout, and no live job row records it as its checkout's binary", editing[i].ID), false, nil
+		holders := slices.DeleteFunc(slices.Clone(live), func(r job.Job) bool {
+			return !Editing(r) || !samePath(r.CheckoutRoot, checkout) && (!r.Worktree.Standing() || !samePath(r.Worktree.Root, checkout))
+		})
+		if len(holders) > 0 {
+			why := fmt.Sprintf("job %s works in its checkout, and no live job row records it as its checkout's binary", holders[0].ID)
+			return Unpinned{Why: why, Holders: holders}, nil
 		}
-		return "no live job row records it as its checkout's binary", true, nil
+		return Unpinned{Why: "no live job row records it as its checkout's binary", Unheld: true}, nil
 	}
 	digest, err := s.cachedDigest(bin)
 	if err != nil {
-		return "", false, err
+		return Unpinned{}, err
 	}
 	if slices.ContainsFunc(pinning, func(r job.Job) bool { return r.Worktree.BinaryDigest == digest }) {
-		return "", false, nil
+		return Unpinned{}, nil
 	}
-	return fmt.Sprintf("its bytes do not hash to what job %s pins, so neither its fork, its placement nor its integrator wrote it last", pinning[0].ID), false, nil
+	return Unpinned{Why: fmt.Sprintf("its bytes do not hash to what job %s pins, so neither its fork, its placement nor its integrator wrote it last", pinning[0].ID)}, nil
 }
 
 // PinBinary records the hash ./magus in job id's checkout has now on every

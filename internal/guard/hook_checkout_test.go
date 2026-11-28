@@ -494,6 +494,93 @@ func (s *UnheldRefusalSuite) TestABuildPlantedBelowACheckoutRootNeverTakesOver()
 	s.Contains(s.refusal(own), "no checkout's root")
 }
 
+// HeldRefusalSuite pins which unpinned ./magus judges in a checkout live rows
+// work in: go-build's clean stamp of a commit every holder's authority holds.
+type HeldRefusalSuite struct {
+	suite.Suite
+	repo      *testkit.Repo
+	session   string
+	self      types.MagusBuild
+	authority string
+}
+
+func TestHeldRefusalSuite(t *testing.T) {
+	suite.Run(t, new(HeldRefusalSuite))
+}
+
+func (s *HeldRefusalSuite) SetupTest() {
+	s.repo = testkit.NewRepository(s.T(), map[string]string{"magus.yaml": "{}\n"})
+	s.session = s.repo.AddWorktree("session").Root()
+	s.self = types.StampedBuild("v0.4.0", "1111111", "2026-11-01T00:00:00Z")
+	s.authority = s.repo.Commit("the root's", nil)
+}
+
+// buildAt writes a ./magus into the checkout that reports a go-build stamp of commit.
+func (s *HeldRefusalSuite) buildAt(version, commit string, dirty bool) string {
+	own := filepath.Join(s.repo.Root(), "magus")
+	body := fmt.Sprintf(`{"version":%q,"commit":%q,"dirty":%t,"build_date":"2026-11-20T00:00:00Z"}`, version, commit, dirty)
+	s.Require().NoError(os.WriteFile(own, []byte(fmt.Sprintf("#!/bin/sh\nprintf '%%s' '%s'\n", body)), 0o755))
+	return own
+}
+
+func (s *HeldRefusalSuite) refusal(own string, holders ...jobtypes.Job) string {
+	if len(holders) == 0 {
+		holders = []jobtypes.Job{{ID: "w1", Authority: s.authority}}
+	}
+	return heldRefusal(s.T().Context(), own, s.session, s.self, holders)
+}
+
+func (s *HeldRefusalSuite) TestABuildAtTheAuthorityJudges() {
+	s.Empty(s.refusal(s.buildAt("v0.4.0-3-gabc", s.authority, false)))
+}
+
+func (s *HeldRefusalSuite) TestABuildOfAnAncestorOfTheAuthorityJudges() {
+	older := s.repo.Head()
+	s.authority = s.repo.Commit("the root's next", nil)
+	s.Empty(s.refusal(s.buildAt("v0.4.0-3-gabc", older, false)))
+}
+
+// A worker that commits its work and rebuilds ./magus stamps a commit past its authority.
+func (s *HeldRefusalSuite) TestABuildOfAWorkersCommitIsRefusedAndNamesTheAdvance() {
+	ahead := s.repo.Commit("the worker's", nil)
+	why := s.refusal(s.buildAt("v0.4.0-4-gdef", ahead, false))
+	s.Contains(why, "which the authority of job w1 does not hold")
+	s.Contains(why, fmt.Sprintf("`%s --root %s job advance w1`", filepath.Join(s.session, "magus"), s.repo.Root()))
+}
+
+func (s *HeldRefusalSuite) TestEveryHolderMustHoldTheCommit() {
+	ahead := s.repo.Commit("the root's later", nil)
+	why := s.refusal(s.buildAt("v0.4.0-4-gdef", ahead, false),
+		jobtypes.Job{ID: "w1", Authority: ahead}, jobtypes.Job{ID: "w2", Authority: s.authority})
+	s.Contains(why, "the authority of job w2 does not hold")
+	s.NotContains(why, "job w1")
+}
+
+func (s *HeldRefusalSuite) TestABuildHeadDoesNotHoldIsRefused() {
+	elsewhere := s.repo.Commit("elsewhere", nil)
+	s.repo.Git("reset", "-q", "--hard", s.authority)
+	s.Contains(s.refusal(s.buildAt("v0.4.0-4-gdef", elsewhere, false)), "nor does the checkout's HEAD")
+}
+
+func (s *HeldRefusalSuite) TestABuildOfAModifiedTreeNeverTakesOver() {
+	s.Contains(s.refusal(s.buildAt("v0.4.0-3-gabc-dirty", s.authority, true)), "built from a modified tree")
+}
+
+// A relink carries the tree's commit through the Go VCS stamp, which go-build did not write.
+func (s *HeldRefusalSuite) TestABuildGoBuildDidNotStampNeverTakesOver() {
+	s.Contains(s.refusal(s.buildAt(buildinfo.UnknownVersion, s.authority, false)), "go-build did not stamp it")
+}
+
+func (s *HeldRefusalSuite) TestAHolderWithNoAuthorityHandsNothingOn() {
+	why := s.refusal(s.buildAt("v0.4.0-3-gabc", s.authority, false), jobtypes.Job{ID: "w1"})
+	s.Contains(why, "job w1 carries no authority")
+}
+
+func (s *HeldRefusalSuite) TestAnOlderBuildNeverTakesOver() {
+	s.self = types.StampedBuild("v0.5.0", "1111111", "2026-12-01T00:00:00Z")
+	s.Contains(s.refusal(s.buildAt("v0.4.0-3-gabc", s.authority, false)), "is not newer than the running")
+}
+
 // JudgedBySuite pins what a verdict says about the binary that judged it.
 type JudgedBySuite struct {
 	suite.Suite

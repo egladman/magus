@@ -68,9 +68,9 @@ func (s *PinSuite) TestPinRecordsTheHashTheBinaryHasNow() {
 	want, err := BinaryDigest(s.bin)
 	s.Require().NoError(err)
 	s.Equal(want, s.row().Worktree.BinaryDigest)
-	refusal, _, err := s.store().PinRefusal(s.T().Context(), s.bin)
+	refusal, err := s.store().PinRefusal(s.T().Context(), s.bin)
 	s.Require().NoError(err)
-	s.Empty(refusal, "the hook hands calls to the binary it pinned")
+	s.Empty(refusal.Why, "the hook hands calls to the binary it pinned")
 }
 
 func (s *PinSuite) TestAdvanceMovesTheAuthorityToHead() {

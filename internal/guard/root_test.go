@@ -490,6 +490,8 @@ func TestRootRebuildsAStaleBinary(t *testing.T) {
 	assert.True(t, differs(contract.Check(at.workspace)))
 	assert.Empty(t, rootWorkClass("./magus run go-build .", at), "a binary built from another contract")
 	assert.Empty(t, rootWorkClass(ward.BootstrapCommand, at))
+	rebuild := fmt.Sprintf("GOEXPERIMENT=jsonv2 go -C %s run -trimpath ./cmd/magus run go-build --no-cache .", shellQuoted(at.workspace))
+	assert.Empty(t, rootWorkClass(rebuild, at), "the stale-binary remedy runs as the root is handed it")
 	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run go-build . && git add -A", at), "only alone on its line")
 	assert.Equal(t, delegableIntegrate, rootWorkClass("./magus run generate .", at), "only the build")
 }

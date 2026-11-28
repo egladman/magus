@@ -855,6 +855,11 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 			fix.why += "\n" + noPlacementScript
 		}
 		return fix
+	case own && hasBinary && ownSourceRoot(root):
+		return binaryFix{
+			say: fmt.Sprintf("rebuild and stamp ./magus with `%s`, alone on its line", bootstrap),
+			why: rebuildWhy,
+		}
 	case own && hasBinary:
 		return binaryFix{
 			say: ward.RelinkAndStampAt(root),
@@ -920,6 +925,13 @@ const relinkWhy = "The relink loads no magusfile, so it runs while nothing loads
 	"It links no version and no go-build stamp, and the stale-binary rule reads an unstamped ./magus as stale, so the relinked binary then runs go-build, which loads the tree and stamps it. " +
 	"If the load error names a magusfile line instead, fix that line. " +
 	"If it names generated code the tree's sources moved past, regenerate it with `go generate ./<package>`, alone on its line, then relink."
+
+// rebuildWhy is why a stale ./magus in a checkout of magus is rebuilt in one
+// line. A relink leaves an unstamped binary whose contract matches. The root's
+// rule then refuses the go-build that stamps it.
+const rebuildWhy = "The bootstrap compiles the tree's own sources, so the binary it runs carries the tree's contract and loads the magusfile, and its go-build relinks ./magus and stamps it in the same line. " +
+	"If the load error names a magusfile line instead, fix that line. " +
+	"If it names generated code the tree's sources moved past, regenerate it with `go generate ./<package>`, alone on its line, then rebuild."
 
 // workerBuildVerdict is the verdict for a worker building magus. Its command is
 // placementNext, served apart from it.

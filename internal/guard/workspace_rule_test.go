@@ -214,7 +214,7 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 		"So does putting back a file the load error names as an import it cannot find: `git mv` onto it, `git restore` or `git checkout --` of it, or a write to it. "+
 		"`git restore` and `git checkout --` also put back any other file the load error names.\n"+
 		"%[4]s\n"+
-		"see: %[3]sstale-binary/", staleOwnSay(root), errStaleLoad.Error(), ruleDocsBase, relinkWhy), stored)
+		"see: %[3]sstale-binary/", staleOwnSay(root), errStaleLoad.Error(), ruleDocsBase, rebuildWhy), stored)
 	d := staleBinaryDenial(judgedCall{seam: seamCommand, what: "`git push`"}, unloadStale, failureLines(staleFailures), true, root)
 	assert.Equal(t, fmt.Sprintf("%s\nsee: %sstale-binary/", d.full(), ruleDocsBase), stored)
 }
@@ -268,7 +268,7 @@ func TestLoadFailureOfATypoRefusesChangesNamingTheError(t *testing.T) {
 
 	push := Judge(ctx, deps, Request{Input: "git push", Host: "claude-code", Session: "s1"})
 	stored := shortDeny(t, cacheDir, push, denyRulePolicyUnloaded,
-		fmt.Sprintf("`git push` waits for this workspace's guard policy to load; %s.", ward.RelinkAndStampAt(root)))
+		fmt.Sprintf("`git push` waits for this workspace's guard policy to load; %s.", rebuildOwnFix(root)))
 	d := unloadedDenial(judgedCall{seam: seamCommand, verb: "`git push`"}, failures, true, true, hookLocation(ctx, deps).workspace)
 	assert.Equal(t, fmt.Sprintf("%s\nsee: %spolicy-unloaded/", d.full(), ruleDocsBase), stored)
 	assert.Contains(t, stored, "\nThe likeliest cause is a ./magus older than the tree.\n")
@@ -333,7 +333,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 
 		assert.Contains(t, v.Context, fmt.Sprintf("Judged by %s (%s), which is not this checkout's ./magus. %s", other, version, builtFrom))
 		assert.Contains(t, v.Context, "the hook uses ./magus when the call runs inside this checkout")
-		assert.Contains(t, v.Context, ward.RelinkAndStampAt(root))
+		assert.Contains(t, v.Context, rebuildOwnFix(root))
 		assert.Contains(t, v.Context, "judged nothing: the magusfile failed to load: ")
 	})
 	t.Run("the same file as ./magus", func(t *testing.T) {
@@ -345,7 +345,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 
 		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 
-		assert.Contains(t, v.Context, fmt.Sprintf("Judged by %s (%s), this checkout's ./magus. %s. Fix: %s.", deps.Binary, version, builtFrom, ward.RelinkAndStampAt(root)))
+		assert.Contains(t, v.Context, fmt.Sprintf("Judged by %s (%s), this checkout's ./magus. %s. Fix: %s.", deps.Binary, version, builtFrom, rebuildOwnFix(root)))
 	})
 	t.Run("no ./magus in the checkout", func(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
@@ -399,7 +399,7 @@ func TestJudgingBinaryNoteForAWorkerNamesThePlacement(t *testing.T) {
 
 	assert.Equal(t, fmt.Sprintf("Judged by %s, this checkout's ./magus. It was built from another contract than the tree carries. Fix: ask the main session to place a ./magus that loads this workspace.", filepath.Join(root, "magus")),
 		judgingBinaryNote(ctx, judge, at, stale, "lease-a"))
-	assert.Equal(t, fmt.Sprintf("Judged by %s, this checkout's ./magus. It was built from another contract than the tree carries. Fix: %s.", filepath.Join(root, "magus"), ward.RelinkAndStampAt(root)),
+	assert.Equal(t, fmt.Sprintf("Judged by %s, this checkout's ./magus. It was built from another contract than the tree carries. Fix: %s.", filepath.Join(root, "magus"), rebuildOwnFix(root)),
 		judgingBinaryNote(ctx, judge, at, stale, ""))
 	assert.Empty(t, judgingBinaryNote(ctx, Dependencies{}, at, stale, ""))
 }
