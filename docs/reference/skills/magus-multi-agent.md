@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 28415
-skill_short_bytes: 23331
+skill_full_bytes: 28313
+skill_short_bytes: 21933
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `a1349d24c884` |
+| `skill-content` | `73e13e9088ea` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -98,17 +98,9 @@ The guard enforces this by role, and the role is the live lease: the root may ta
 
 Before any partitioning, the plan lists its interfaces in one table. An interface is
 anything two pieces of work both touch: a function, a type, an event, a file's row
-shape, a config key, a command's arguments. One row each:
-
-| column | holds |
-| --- | --- |
-| name | the symbol as `magus refs` resolves it, or the key, flag or row shape |
-| file | the one file it lives in, with no consumer's code in it |
-| signature | the declaration, as the index renders it |
-| stub | one sentence: what it answers correctly, what it refuses and with what message |
-| test | the test that runs the stub |
-| filled by | the chunk that replaces the body, or `final` when the stub is the body |
-| used by | the chunks that call it |
+shape, a config key, a command's arguments. One row each, with columns name, file (one file, no consumer's
+code), signature, stub (what it answers, what it refuses and how), test, filled by (the
+chunk, or `final`) and used by.
 
 An honest stub is a minimal real implementation: it answers what it can correctly and
 refuses the rest loudly. It is never a panic, a mock or a zero value. A stub that needs more than a
@@ -136,8 +128,7 @@ Disjoint write sets LICENSE parallelism; they do not require it. Every worker ca
 a fixed load before it reads a line of the diff.
 
 - A depends-on chain is ONE worker in sequence, not two workers in turn.
-- For the rest, read the grouping metric (`magus\workspace().grouping` through `client`,
-  or `grouping history` in `magus describe job <job>`) and weigh each measured shape
+- For the rest, read the grouping metric (`grouping history` in `magus describe job <job>`) and weigh each measured shape
   against the others. It reports
   and never decides.
 - Where the lens answers unknown, apply these defaults and say in the plan that you
@@ -247,11 +238,8 @@ ambiguous API boundary does not get the cheapest model because it looked like le
 work.
 
 Naming it is the checkable half: every spawn names a model, or an agent definition
-that names one.
-
-- Inheriting the parent's model ON PURPOSE is fine and often right.
-- Inheriting it BY OMISSION is the failure. A host defaulting to "same as the parent"
-  makes every unnamed spawn the most expensive one, and records no choice.
+that names one. Inheriting the parent's model on
+purpose is fine; by omission is the failure, since it records no choice.
 
 When the tier is unclear, start at routine. A job that fails its criteria there is
 re-forked one tier up, not retried at the same one.
@@ -271,13 +259,10 @@ is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at routine:
-
-- Fork one read-only job per claim, input, or variant, and run them all at once.
-  Give each a script check, so `magus job wait` can pass it.
-- Spawn the `magus-scout` agent for each where your harness installed it.
-- Each reports its command and output ref.
-- The design tier only reconciles the claims where workers disagree.
+To prove something, brute-force it at routine: fork one read-only job per claim, input
+or variant, all at once, each with a script check so `magus job wait` can pass it, or the `magus-scout`
+agent where installed. Each reports its command and output ref; the design tier only
+reconciles disagreements.
 
 Keep routine jobs short-lived. The brief points at evidence (paths, output refs, the
 row) and carries no transcript.
@@ -304,10 +289,7 @@ magus affected <target> --plan
 ```
 
 For a proposed change whose paths are known but not yet edited, plan those paths
-instead of the current diff (`--stdin --plan`, one repo-relative path per line).
-Read the JSON fields `count`, `max_parallel`, `source`, and `matrix`.
-Use a shard only as the first partition. If paths are unknown, query the task's symbols,
-files, and projects before producing a stdin plan.
+instead of the current diff (`--stdin --plan`, one repo-relative path per line). Use a shard only as the first partition.
 
 ## Prove that jobs do not collide
 
@@ -347,8 +329,8 @@ When `magus job fork` refuses one, the answer is a separate worktree, not a narr
 boundary: fork with `--checkout <dir>` outside the workspace, never by hand.
 
 Fork records what it could prove in `write_proof` (`alone`, `disjoint` or
-`overlapping`), and `magus ls jobs` prints it. An overlap is recorded, not refused:
-sequencing two jobs onto one path is your call. Answer the guard's shared-checkout reminder with a proof or a
+`overlapping`). An overlap is recorded, not refused: sequencing two jobs onto one path
+is your call. Answer the guard's shared-checkout reminder with a proof or a
 worktree, not a judgment that it looks fine.
 
 Project boundaries alone are insufficient. A declared dependency means group the work
@@ -363,26 +345,14 @@ binds its child to nothing.
 
 1. Record the checkpoint you are handing out: `magus vcs checkpoint -o name` prints
    the revision, plus a dirty-patch digest when the tree is not clean.
-2. Fork one job per unit, from flags:
-
-   ```sh
-   magus job fork api-store --model <tier or model> \
-     --instructions "accounts move to the new store; nothing names the old one" \
-     --write-paths 'api/store.go,api/store_test.go,db/migrations/*.sql' \
-     --check "go-test api -- -run TestStore" \
-     --checkpoint <checkpoint>
-   ```
-
-   Or fork from a record with `magus job fork --stdin`, the form that sets them;
-   [reference.md](reference.md) shows one.
+2. Fork one job per unit, from flags (`--model`, `--instructions`, `--write-paths`, `--check`,
+   `--checkpoint`) or from a record with `magus job fork --stdin` ([reference.md](reference.md)).
 
    Before every fork, run `magus job fork --stdin --dry-run`: it lists every problem with its code and fix, and writes nothing.
    `magus job fork --schema` prints every field and the newest `api_version`.
 3. Spawn the worker with the description `<parent>/<role> <job>`: two words, a parent id and a role joined by `/`, then the job id.
    - A root job has no parent row, so its first word takes any label
      (`orchestrator/feat api-store`).
-   - A child reads `api-store/fix migrate`; the guard resolves the job as `migrate`,
-     else `api-store/migrate`.
    - The role is a word for the work (`feat`, `fix`, `review`). A workspace spawn
      rule may restrict it, and its refusal names the list.
    - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
@@ -431,8 +401,6 @@ is the orchestrator's; a refused worker reports it as an unresolved risk and sto
 
 After the spawn, the row carries the job:
 
-- A worker records the base it LANDED on, which can differ from the checkpoint you
-  handed it.
 - A denied worker coordinates and never works around.
 - Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
   not a pass.
@@ -468,15 +436,12 @@ Its merge (`hack/dev/merge-job-branches.buzz --apply`) then recomposes the landi
 branch's unpushed commits into one per merged job, each output beside its source, with no
 merge commit left and the merged tree byte-identical. A commit a remote ref already holds stays.
 
-As jobs finish: compare the store to the ACTUAL diff since each checkpoint; run
-`magus job wait <job>` before reading each result. On rejection, give the
-same job and its `magus describe job <job>` feedback to the worker handling
-the correction. Verify the corrected result on that job. Reopen evidence with
-`magus query output <ref>`; resolve shared seams once; regenerate declared outputs
-once; re-plan with `magus affected <target> --plan` if the partition broke; read
-`magus diff --impact` for context only; validate once per wave; finish with
-`magus affected ci`. [reference.md](reference.md#integrate-and-verify) has the
-mechanical wait checks and the wave loop.
+As jobs finish: compare the store to the ACTUAL diff since each checkpoint and run
+`magus job wait <job>` before reading a result. On rejection, give the same job and its
+`magus describe job <job>` feedback to the worker handling the correction. Resolve shared
+seams and regenerate declared outputs once; re-plan with `magus affected <target> --plan` if the
+partition broke; validate once per wave; finish with `magus affected ci`.
+[reference.md](reference.md#integrate-and-verify) has the mechanical wait checks and the wave loop.
 ````
 
 
@@ -768,13 +733,11 @@ is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at routine:
-
-- Fork one read-only job per claim, input, or variant, and run them all at once.
-  Give each a script check, so `magus job wait` can pass it.
-- Spawn the `magus-scout` agent for each where your harness installed it.
-- Each reports its command and output ref, so evidence settles the claim and not a worker's reading.
-- The design tier only reconciles the claims where workers disagree.
+To prove something, brute-force it at routine: fork one read-only job per claim, input
+or variant, all at once, each with a script check so `magus job wait` can pass it.
+Spawn the `magus-scout` agent for each where your harness installed it. Each reports its
+command and output ref, so evidence settles the claim and not a worker's reading.
+The design tier only reconciles the claims where workers disagree.
 
 Keep routine jobs short-lived. The brief points at evidence (paths, output refs, the
 row) and carries no transcript. Some providers raise a tier's price past a prompt size.
@@ -844,9 +807,8 @@ When `magus job fork` refuses one, the answer is a separate worktree, not a narr
 boundary: fork with `--checkout <dir>` outside the workspace, never by hand.
 
 Fork records what it could prove in `write_proof` (`alone`, `disjoint` or
-`overlapping`), and `magus ls jobs` prints it. An overlap is recorded, not refused:
-sequencing two jobs onto one path is your call, and the row records
-whether anybody checked. Answer the guard's shared-checkout reminder with a proof or a
+`overlapping`). An overlap is recorded, not refused: sequencing two jobs onto one path
+is your call. Answer the guard's shared-checkout reminder with a proof or a
 worktree, not a judgment that it looks fine.
 
 Project boundaries alone are insufficient. A declared dependency means group the work
@@ -985,8 +947,8 @@ the correction. Verify the corrected result on that job. Reopen evidence with
 `magus query output <ref>`; resolve shared seams once; regenerate declared outputs
 once; re-plan with `magus affected <target> --plan` if the partition broke; read
 `magus diff --impact` for context only; validate once per wave; finish with
-`magus affected ci`. [reference.md](reference.md#integrate-and-verify) has the
-mechanical wait checks and the wave loop.
+`magus affected ci`.
+[reference.md](reference.md#integrate-and-verify) has the mechanical wait checks and the wave loop.
 ````
 
 
