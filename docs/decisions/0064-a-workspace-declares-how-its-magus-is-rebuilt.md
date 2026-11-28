@@ -66,13 +66,35 @@ checkout:
   rebuild:
     - [GOEXPERIMENT=jsonv2, go, -C, "{checkout}", build, -trimpath, -o, magus, ./cmd/magus]
     - ["{checkout}/magus", buzz, -C, "{checkout}", hack/dev/stamp-binary.buzz]
-    - ["{checkout}/magus", buzz, -C, "{checkout}", hack/dev/bootstrap-checkout.buzz, --, --here, --verify-ready]
+    - ["{checkout}/magus", buzz, -C, "{checkout}", hack/dev/bootstrap-checkout.buzz]
+  rebuild_fallback:
+    - [GOEXPERIMENT=jsonv2, go, -C, "{checkout}", run, -trimpath, ./cmd/magus, run, go-build, --no-cache, .]
 ```
 
 Each entry is one command as a list of words. A leading `NAME=value` word is
-environment. `{checkout}` in a word is bound to the checkout root. The lines run in
-order, each alone on its line, and the first must need no magus. Go knows no flag, no
-toolchain and no step name.
+environment. `{checkout}` in a word is bound to the checkout root, and it is the only
+placeholder: the guard can run from any directory, so every line aims with `-C`. The
+lines run in order, each alone on its line, and the first must need no magus. Go knows
+no flag, no toolchain and no step name.
+
+`rebuild` is the standard repair and never skips a cache. `--no-cache` skips magus's own
+target cache, so it is the fallback for a cache that is suspect. The fallback is a
+second declared list, and every remedy prints it after the standard lines, named as the
+line to run if they fail. That is simpler than a line named only after a failure: the
+guard keeps no record of what ran, and a line it exempts must be declared either way.
+The second key's name is Eli's pick (Open questions).
+
+Three things in these lines are deliberate:
+
+- `-trimpath` stays. It strips local paths from the binary and does not bypass Go's
+  build cache, and the magusfile's `go-build` passes it too, so the two share entries.
+- `GOEXPERIMENT=jsonv2` stays. magus imports `encoding/json/v2`, which does not compile
+  without the experiment, and `go.mod` cannot set it. It now lives in this repository's
+  declaration and not in the binary.
+- The ready line passes no flag. The script's flags are renamed in a separate change:
+  `--here` goes (the current directory is the default), building only when `./magus` is
+  not at HEAD becomes the default so `--verify-ready` goes, and always building becomes
+  `--force`.
 
 ### 2. `Rebuild` is a field on `config.Checkout`, read by `config.LoadCheckout`
 
@@ -102,7 +124,7 @@ release line.
 
 `ReadyCheckoutCommand` and `buildRemedy` stop appending `--here` and `--verify-ready`.
 A remedy prints the declared lines as written. This repository's ready step is the last
-line of its own `rebuild` list and carries its own flags.
+line of its own `rebuild` list.
 
 ### 5. What Go keeps and loses
 
@@ -154,8 +176,8 @@ same commit. If a comparison gate reports a finding, a person adds the deviation
 - A checkout of magus whose HEAD is older than the key gets the release line from a
   newer binary. Bring the base in. No fallback reads `go.mod`.
 - An uncommitted `checkout:` edit has no effect on the guard.
-- The hand-typed `go run` bootstrap is no longer exempt. `AGENTS.md` and the bootstrap
-  scripts change in the same commit.
+- The `go run` bootstrap with `--no-cache` is the declared fallback, no longer the
+  standard line. `AGENTS.md` and the bootstrap scripts change in the same commit.
 - A hook that relied on magus appending `--here` or `--verify-ready` declares them.
 - `CheckoutHookAt` answered "" for a bad path; `LoadCheckout` errors.
 - MGS1021's advice drops its "built from source" line.
@@ -166,7 +188,8 @@ same commit. If a comparison gate reports a finding, a person adds the deviation
 | --- | --- | --- |
 | `config.Checkout.Rebuild`; `config.LoadCheckout` replaces `CheckoutHookAt` | config tests beside `LoadAgents`'s: lenient past unknown keys, an error on bad YAML, an escaping path or a malformed entry | planned |
 | the guard reads `checkout:` at HEAD, a leased call at its row's authority | a guard case: an uncommitted `rebuild` edit exempts nothing | planned |
-| magus's own `magus.yaml` declares link, stamp and ready lines with their flags | a test beside the stamp script that it runs no target | planned |
+| magus's own `magus.yaml` declares link, stamp and ready lines, each aimed with `-C {checkout}` | a test beside the stamp script that it runs no target | planned |
+| a declared fallback list is printed after the standard lines and exempt like them; only it passes `--no-cache` | a guard case: the remedy names both, the standard first | planned |
 | magus adds no argument to a declared line or hook | `ReadyCheckoutCommand` gone; `buildRemedy` prints the lines as declared | planned |
 | `ownSourceRoot`, `own` and the Go commands and matchers are deleted | `magus refs` finds none | planned |
 | the skew rules ask whether the tree carries a contract | a consumer fixture with a leased row is never refused | planned |
@@ -225,6 +248,8 @@ The build cannot merge in parts without leaving two mechanisms.
 
 ## Open questions
 
+- The fallback key's name. Options: `rebuild_fallback`, `rebuild_clean`. Neither exists
+  in `config.Checkout`.
 - `LoadCheckout(root)` names a root, and the guard needs the bytes at HEAD or at an
   authority. The door that hands committed bytes to the same decoder is not named.
 - Whether link, stamp and ready equal today's bootstrap and ready on a fresh checkout.
