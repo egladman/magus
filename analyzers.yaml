@@ -117,6 +117,25 @@ no-throw:
       hack/policy/stale.buzz: 1
       spells/golang/golangci.buzz: 2
 
+core-names-nothing-of-this-repository:
+  # file: lines naming this repository's paths, targets or flags
+  baseline:
+    internal/config/stale_remedy.go: 1
+    internal/doctor/checks.go: 1
+    internal/guard/bootstrap.go: 3
+    internal/guard/catalog.go: 12
+    internal/guard/clear_cache.go: 1
+    internal/guard/hook_checkout.go: 1
+    internal/guard/load_contract.go: 1
+    internal/guard/stale_binary.go: 3
+    internal/interp/bindings/project.go: 1
+    internal/job/isolation.go: 1
+    internal/job/store.go: 1
+    internal/job/worktree.go: 1
+    internal/ward/gorun.go: 1
+    internal/ward/version.go: 6
+    libs/testkit/environ.go: 1
+
 # An engineered zone: a path in this project whose complexity a measurement
 # licenses. reason is spec, performance or security; evidence names the files
 # that license it; budgets are the anchors the zone holds in place of the
@@ -1073,7 +1092,7 @@ proofread:
     internal/guard/interpreter_test.go: {code-comment-sentence: 2}
     internal/guard/lapse.go: {code-comment-budget: 3, code-comment-sentence: 6, comment-history: 1}
     internal/guard/lapse_test.go: {code-comment-sentence: 5, comment-history: 1}
-    internal/guard/lease.go: {code-comment-budget: 89, code-comment-sentence: 127, comment-caps: 30, comment-first-person: 6, comment-history: 4, doc-path: 1, provenance: 1}
+    internal/guard/lease.go: {code-comment-budget: 88, code-comment-sentence: 125, comment-caps: 30, comment-first-person: 6, comment-history: 4, doc-path: 1, provenance: 1}
     internal/guard/lease_claim.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-first-person: 1}
     internal/guard/lease_test.go: {code-comment-budget: 23, code-comment-sentence: 77, comment-caps: 13, comment-history: 4, doc-path: 3}
     internal/guard/load_contract.go: {code-comment-budget: 2, code-comment-sentence: 2}
@@ -1200,7 +1219,7 @@ proofread:
     internal/handler/diff/thread_test.go: {code-comment-sentence: 2}
     internal/handler/graph/handler.go: {code-comment-budget: 1, comment-caps: 1}
     internal/handler/graph/handler_test.go: {banner: 4, code-comment-sentence: 2, comment-first-person: 1}
-    internal/handler/graph/service.go: {code-comment-budget: 6, code-comment-sentence: 11, comment-caps: 3}
+    internal/handler/graph/service.go: {code-comment-budget: 6, code-comment-sentence: 10, comment-caps: 2}
     internal/handler/graph/service_test.go: {code-comment-budget: 1, code-comment-sentence: 6, comment-caps: 4}
     internal/handler/graph/wire.go: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 3}
     internal/handler/job/service.go: {code-comment-budget: 15, code-comment-sentence: 18, comment-caps: 5, comment-first-person: 1}
@@ -1343,7 +1362,7 @@ proofread:
     internal/interp/bindings/gen/callbacks_test.go: {code-comment-budget: 1}
     internal/interp/bindings/gen/modules_test.go: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 2}
     internal/interp/bindings/guard.go: {code-comment-budget: 3, code-comment-sentence: 3, comment-caps: 2}
-    internal/interp/bindings/guard_rule.go: {code-comment-budget: 4, code-comment-sentence: 4}
+    internal/interp/bindings/guard_rule.go: {code-comment-budget: 3, code-comment-sentence: 4}
     internal/interp/bindings/guard_rule_test.go: {code-comment-budget: 1, code-comment-sentence: 4}
     internal/interp/bindings/guard_test.go: {code-comment-budget: 4, code-comment-sentence: 6, comment-caps: 1, comment-first-person: 1}
     internal/interp/bindings/harness.go: {code-comment-budget: 1}
@@ -1431,7 +1450,7 @@ proofread:
     internal/job/check_grader_test.go: {code-comment-sentence: 2}
     internal/job/check_line.go: {code-comment-budget: 1, code-comment-sentence: 1}
     internal/job/check_line_test.go: {code-comment-sentence: 1}
-    internal/job/checkout.go: {code-comment-budget: 18, code-comment-sentence: 38, comment-caps: 7, comment-history: 1, doc-path: 1}
+    internal/job/checkout.go: {code-comment-budget: 18, code-comment-sentence: 37, comment-caps: 7, comment-history: 1, doc-path: 1}
     internal/job/checkout_test.go: {code-comment-budget: 2, code-comment-sentence: 13, comment-caps: 3, comment-history: 1, provenance: 2}
     internal/job/checkpoint.go: {code-comment-budget: 2, code-comment-sentence: 4}
     internal/job/checkpoint_test.go: {code-comment-sentence: 4}
@@ -1447,7 +1466,7 @@ proofread:
     internal/job/declare_test.go: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 2}
     internal/job/decode.go: {code-comment-budget: 7, code-comment-sentence: 13, comment-caps: 3}
     internal/job/decode_test.go: {code-comment-budget: 7, code-comment-sentence: 9, comment-caps: 6}
-    internal/job/end.go: {code-comment-budget: 5, code-comment-sentence: 12}
+    internal/job/end.go: {code-comment-budget: 4, code-comment-sentence: 11}
     internal/job/end_test.go: {code-comment-sentence: 2}
     internal/job/evidence/boundary.go: {code-comment-budget: 6, code-comment-sentence: 10, comment-caps: 8}
     internal/job/evidence/boundary_test.go: {code-comment-sentence: 1, comment-history: 1}
@@ -1456,7 +1475,7 @@ proofread:
     internal/job/evidence/gate_test.go: {code-comment-sentence: 1}
     internal/job/evidence/graph.go: {code-comment-budget: 2, code-comment-sentence: 6}
     internal/job/evidence/graph_test.go: {code-comment-sentence: 3}
-    internal/job/evidence/observe.go: {code-comment-budget: 3, code-comment-sentence: 4, comment-history: 1}
+    internal/job/evidence/observe.go: {code-comment-budget: 2, code-comment-sentence: 3}
     internal/job/evidence/observe_test.go: {code-comment-sentence: 1}
     internal/job/evidence/symbols.go: {code-comment-budget: 5, code-comment-sentence: 9, comment-caps: 3}
     internal/job/evidence/symbols_test.go: {code-comment-sentence: 2}
@@ -1471,11 +1490,11 @@ proofread:
     internal/job/grouping_test.go: {code-comment-sentence: 1}
     internal/job/inflight.go: {code-comment-budget: 1, code-comment-sentence: 3}
     internal/job/isolation.go: {code-comment-budget: 2, code-comment-sentence: 4}
-    internal/job/landings.go: {code-comment-budget: 8, code-comment-sentence: 13, comment-caps: 2}
+    internal/job/landings.go: {code-comment-budget: 7, code-comment-sentence: 13, comment-caps: 2}
     internal/job/landings_test.go: {code-comment-sentence: 5, comment-caps: 1, comment-history: 1}
     internal/job/lease.go: {code-comment-budget: 2, code-comment-sentence: 4, comment-caps: 1}
     internal/job/lease_test.go: {code-comment-sentence: 2}
-    internal/job/lifecycle.go: {code-comment-budget: 24, code-comment-sentence: 39, comment-caps: 4, doc-path: 1}
+    internal/job/lifecycle.go: {code-comment-budget: 22, code-comment-sentence: 36, comment-caps: 4, doc-path: 1}
     internal/job/lifecycle_test.go: {code-comment-budget: 2, code-comment-sentence: 11, comment-caps: 2, comment-history: 3, provenance: 1}
     internal/job/merge.go: {code-comment-budget: 6, code-comment-sentence: 11, comment-caps: 2}
     internal/job/migrations.go: {code-comment-budget: 4, code-comment-sentence: 4, comment-history: 2, doc-path: 1}
@@ -1507,7 +1526,7 @@ proofread:
     internal/job/render.go: {code-comment-budget: 2, code-comment-sentence: 6, comment-caps: 1}
     internal/job/render_test.go: {code-comment-budget: 1, code-comment-sentence: 6, comment-caps: 2}
     internal/job/render_validation.go: {code-comment-budget: 2, code-comment-sentence: 3}
-    internal/job/retain.go: {code-comment-budget: 4, code-comment-sentence: 5}
+    internal/job/retain.go: {code-comment-budget: 3, code-comment-sentence: 4}
     internal/job/retain_test.go: {code-comment-sentence: 2}
     internal/job/row_notes.go: {code-comment-sentence: 4}
     internal/job/snapshot.go: {code-comment-sentence: 2}
@@ -1923,7 +1942,7 @@ proofread:
     internal/settle/claims_test.go: {code-comment-sentence: 1}
     internal/settle/driver.go: {code-comment-budget: 4, code-comment-sentence: 7, comment-caps: 4, comment-first-person: 2, doc-path: 1}
     internal/settle/driver_test.go: {code-comment-budget: 9, code-comment-sentence: 12, comment-caps: 3, comment-history: 1}
-    internal/settle/hook.go: {code-comment-budget: 2, code-comment-sentence: 4}
+    internal/settle/hook.go: {code-comment-budget: 1, code-comment-sentence: 1}
     internal/settle/hook_test.go: {code-comment-sentence: 1}
     internal/settle/ls_files.go: {code-comment-budget: 2, code-comment-sentence: 3, comment-caps: 1}
     internal/settle/ls_files_test.go: {code-comment-budget: 1, code-comment-sentence: 5, comment-caps: 2}
@@ -1944,7 +1963,7 @@ proofread:
     internal/spell/builtins.go: {code-comment-budget: 5, code-comment-sentence: 9}
     internal/spell/builtins_test.go: {code-comment-budget: 10, code-comment-sentence: 15, comment-caps: 2}
     internal/spell/charm.buzz: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 1}
-    internal/spell/contract.go: {code-comment-budget: 2, code-comment-sentence: 3, doc-path: 1}
+    internal/spell/contract.go: {code-comment-budget: 2, code-comment-sentence: 2, doc-path: 1}
     internal/spell/contract_check.go: {code-comment-budget: 1, code-comment-sentence: 2, comment-history: 1, doc-path: 1}
     internal/spell/decode.go: {code-comment-budget: 8, code-comment-sentence: 13, comment-caps: 1}
     internal/spell/decode_test.go: {code-comment-sentence: 11, comment-caps: 3, comment-history: 2}
@@ -2046,7 +2065,7 @@ proofread:
     internal/ward/reason.go: {code-comment-budget: 1, code-comment-sentence: 1}
     internal/ward/reason_test.go: {code-comment-sentence: 1}
     internal/ward/shadow.go: {code-comment-budget: 1, code-comment-sentence: 1}
-    internal/ward/version.go: {code-comment-budget: 6, code-comment-sentence: 11, comment-caps: 8, comment-history: 4}
+    internal/ward/version.go: {code-comment-budget: 5, code-comment-sentence: 11, comment-caps: 8, comment-history: 4}
     internal/ward/version_test.go: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1}
     internal/ward/ward.go: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 3}
     internal/ward/ward_test.go: {comment-caps: 2}
@@ -2263,20 +2282,12 @@ proofread:
     std/env_test.go: {code-comment-sentence: 4, comment-caps: 2, comment-history: 1}
     std/examples.go: {code-comment-budget: 1, code-comment-sentence: 3, comment-caps: 2}
     std/examples/flags/parse.buzz: {code-comment-budget: 1}
-    std/examples/fs/exists.buzz: {code-comment-sentence: 1}
-    std/examples/fs/stat.buzz: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 1}
-    std/examples/http/get.buzz: {comment-caps: 1}
     std/examples/image/extend-base.buzz: {code-comment-budget: 1, code-comment-sentence: 2}
     std/examples/image/multi-arch.buzz: {comment-caps: 1}
     std/examples/image/multi-stage.buzz: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 3, doc-path: 1}
     std/examples/image/node-typescript.buzz: {comment-history: 1}
     std/examples/image/static-go.buzz: {doc-path: 1}
-    std/examples/json/parse.buzz: {comment-caps: 1}
-    std/examples/pipe/emit.buzz: {code-comment-sentence: 1}
-    std/examples/strings/words.buzz: {code-comment-budget: 1}
     std/examples/term/notify.buzz: {comment-caps: 1}
-    std/examples/term/pick.buzz: {code-comment-budget: 1, code-comment-sentence: 1}
-    std/examples_test.go: {code-comment-budget: 1, code-comment-sentence: 1, comment-caps: 2}
     std/flags.go: {code-comment-budget: 3, code-comment-sentence: 5, comment-caps: 3}
     std/flags_test.go: {code-comment-sentence: 5, comment-caps: 3}
     std/fs.go: {code-comment-budget: 7, code-comment-sentence: 16, comment-caps: 10, doc-path: 1, provenance: 1}
@@ -2451,7 +2462,7 @@ proofread:
     vcs/commit.go: {code-comment-budget: 2, code-comment-sentence: 3}
     vcs/config.go: {code-comment-budget: 10, code-comment-sentence: 9, comment-caps: 5, comment-history: 3}
     vcs/diff.go: {code-comment-budget: 3, code-comment-sentence: 4, comment-history: 1}
-    vcs/differing_paths.go: {code-comment-budget: 1}
+    vcs/compare.go: {code-comment-budget: 1}
     vcs/git.go: {code-comment-budget: 94, code-comment-sentence: 168, comment-caps: 80, comment-first-person: 2, comment-history: 7, doc-path: 3, provenance: 2}
     vcs/git_test.go: {code-comment-budget: 80, code-comment-sentence: 93, comment-caps: 33, comment-first-person: 1, comment-history: 4, doc-path: 3, provenance: 1}
     vcs/hg.go: {code-comment-budget: 18, code-comment-sentence: 47, comment-caps: 30, comment-first-person: 1}
@@ -2464,15 +2475,13 @@ proofread:
     vcs/managed_test.go: {code-comment-budget: 3, code-comment-sentence: 4, comment-caps: 1, comment-history: 2}
     vcs/mercurial.go: {code-comment-budget: 16, code-comment-sentence: 23, comment-caps: 11, provenance: 2}
     vcs/mercurial_test.go: {code-comment-budget: 1, code-comment-sentence: 4}
-    vcs/owed.go: {code-comment-budget: 1, code-comment-sentence: 2}
+    vcs/owed.go: {code-comment-sentence: 2}
     vcs/owed_test.go: {code-comment-sentence: 1}
     vcs/owner_windows.go: {code-comment-sentence: 1}
     vcs/regions.go: {code-comment-budget: 6, code-comment-sentence: 9, comment-caps: 1}
     vcs/regions_test.go: {code-comment-sentence: 6}
     vcs/sapling.go: {code-comment-budget: 27, code-comment-sentence: 52, comment-caps: 31, comment-first-person: 2, provenance: 1}
     vcs/sapling_test.go: {code-comment-budget: 7, code-comment-sentence: 15, comment-caps: 9, comment-history: 1}
-    vcs/settle.go: {code-comment-budget: 1, code-comment-sentence: 3}
-    vcs/settle_test.go: {code-comment-sentence: 2}
     vcs/unsupported.go: {code-comment-budget: 1, code-comment-sentence: 2, comment-caps: 1}
     vcs/vcs.go: {code-comment-budget: 6, code-comment-sentence: 8, comment-caps: 4}
     vcs/vcs_test.go: {code-comment-budget: 47, code-comment-sentence: 70, comment-caps: 61, comment-history: 2}

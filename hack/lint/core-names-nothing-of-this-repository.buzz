@@ -1,0 +1,213 @@
+// core-names-nothing-of-this-repository: product Go under internal/, cmd/, libs/
+// or std/ names none of this repository's paths, targets or script flags. Such a
+// line ships this repository's policy to every user. Each file's count is held
+// to the root analyzers.yaml baseline, which only falls.
+//
+// Tier 2, measured shape: no file holds more such lines than its count.
+namespace corenames;
+
+import "assert";
+import "fs";
+import "std";
+import "encoding/yaml";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final POLICY = "analyzers.yaml";
+final KEY = "core-names-nothing-of-this-repository";
+final PRINCIPLE = "docs/design/principles/magus-is-its-own-first-consumer.md";
+
+// NAMES are this repository's own words, each split so this file never matches itself.
+export final NAMES = ["hack" + "/", "go-" + "build", "./cmd/" + "magus", "GOEXP" + "ERIMENT",
+    "bootstrap-" + "checkout", "--verify-" + "ready"];
+
+final ROOTS = ["internal/", "cmd/", "libs/", "std/"];
+
+final FIX = "Declare it where the workspace says how it is built (magus.yaml, a target or a "
+    + "hack/ script) and read the declaration; " + PRINCIPLE + " says why. "
+    + "A count in the root " + POLICY + " " + KEY + ".baseline may only fall.";
+
+export fun reads() > [str] {
+    return ["**/*.go", POLICY];
+}
+
+// scanned reports a product Go file: under a product root, not a test, not
+// generated, not test data.
+export fun scanned(p: str) > bool {
+    if (!p.endsWith(".go") or p.endsWith("_test.go")) {
+        return false;
+    }
+    if (p.indexOf("/gen/") != null or p.indexOf("/testdata/") != null) {
+        return false;
+    }
+    foreach (root in ROOTS) {
+        if (p.startsWith(root)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// nested reports a file under its own go.mod below the root: another project,
+// with its own analyzers.yaml.
+fun nested(f: Path) > bool {
+    var dir = fs\dirname(f.value);
+    while (dir != "." and dir != "/" and dir != "") {
+        final probe = if (f.base == "") dir + "/go.mod" else f.base + "/" + dir + "/go.mod";
+        if (fs\exists(probe) catch false) {
+            return true;
+        }
+        dir = fs\dirname(dir);
+    }
+    return false;
+}
+
+// wordChar reports a character that continues a word, so cargo-build holds no go-build.
+fun wordChar(c: str) > bool {
+    return (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9") or c == "-" or c == "_";
+}
+
+// named reports name in line where no word character runs into it from the left.
+export fun named(line: str, name: str) > bool {
+    var start = 0;
+    while (start < line.len()) {
+        final at = line.sub(start, len: line.len() - start).indexOf(name);
+        if (at == null) {
+            return false;
+        }
+        final pos = start + at!;
+        if (pos == 0 or !wordChar(line.sub(pos - 1, len: 1))) {
+            return true;
+        }
+        start = pos + 1;
+    }
+    return false;
+}
+
+// hits are the 1-based lines of src that name one of NAMES in code, not in a comment.
+export fun hits(src: str) > [int] {
+    final found = mut [<int>];
+    foreach (i, line in src.split("\n")) {
+        if (line.trim().startsWith("//")) {
+            continue;
+        }
+        final cut = line.indexOf(" // ");
+        final code = if (cut == null) line else line.sub(0, len: cut!);
+        foreach (name in NAMES) {
+            if (named(code, name: name)) {
+                found.append(i + 1);
+                break;
+            }
+        }
+    }
+    return found;
+}
+
+// judge holds each file's lines to its baseline count, and each row to what its
+// file still holds.
+export fun judge(lines: {str: [int]}, baseline: {str: int}) > [Finding] {
+    final found = mut [<Finding>];
+    foreach (path, at in lines) {
+        final allowed = baseline[path] ?? 0;
+        if (at.len() > allowed) {
+            foreach (n in at) {
+                found.append(Finding{ path = path, line = n,
+                    message = "this product Go line names this repository: {path} holds {at.len()} such lines, over the {allowed} the {KEY} baseline in {POLICY} records",
+                    hint = FIX });
+            }
+        } else if (at.len() < allowed) {
+            found.append(Finding{ path = POLICY, line = 1,
+                message = "the {KEY} baseline records {allowed} for {path}, which now holds {at.len()}",
+                hint = "Lower the count to {at.len()}: the baseline only shrinks." });
+        }
+    }
+    foreach (path, allowed in baseline) {
+        if (lines[path] == null and allowed > 0) {
+            found.append(Finding{ path = POLICY, line = 1,
+                message = "the {KEY} baseline records {allowed} for {path}, which holds none or is gone",
+                hint = "Delete the row: the baseline only shrinks." });
+        }
+    }
+    return found;
+}
+
+// counts reads the baseline, {path: count}, from the root analyzers.yaml text.
+export fun counts(text: str) > {str: int} {
+    final acc = mut {<str: int>};
+    final doc = yaml\parse(text) catch null;
+    if (doc == null) {
+        return acc;
+    }
+    final rule = doc[KEY];
+    if (rule == null) {
+        return acc;
+    }
+    if (rule["baseline"] -> rows) {
+        foreach (path, count in rows) {
+            acc[path] = std\toInt(count);
+        }
+    }
+    return acc;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final lines = mut {<str: [int]>};
+    var baseline = {<str: int>};
+    foreach (f in files) {
+        if (f.value == POLICY) {
+            final got = support\read(f);
+            if (got.error != null) {
+                throw got.error!.message;
+            }
+            baseline = counts(got.value!);
+        } else if (scanned(f.value) and !nested(f)) {
+            final got = support\read(f);
+            if (got.error != null) {
+                throw got.error!.message;
+            }
+            final at = hits(got.value!);
+            if (at.len() > 0) {
+                lines[f.value] = at;
+            }
+        }
+    }
+    return judge(lines, baseline: baseline);
+}
+
+test "a product line naming this repository is counted and a comment line is not" {
+    final src = "package x\n// see hack" + "/dev\nconst c = \"./cmd/" + "magus\"\n";
+    assert\equal(hits(src), want: [3], message: "only the code line");
+}
+
+test "a name inside a longer word or a trailing comment is not counted" {
+    assert\equal(hits("x := \"cargo-" + "build\"\n"), want: [<int>], message: "cargo-build");
+    assert\equal(hits("Name string // op name (\"go-" + "build\")\n"), want: [<int>], message: "trailing comment");
+    assert\equal(hits("x := \"`go-" + "build`\"\n"), want: [1], message: "quoted");
+}
+
+test "tests, gen and testdata are not read, and only product roots are" {
+    assert\equal(scanned("internal/guard/a.go"), want: true, message: "internal");
+    assert\equal(scanned("internal/guard/a_test.go"), want: false, message: "test");
+    assert\equal(scanned("cmd/magus/gen/flags.go"), want: false, message: "gen");
+    assert\equal(scanned("hack/x.go"), want: false, message: "hack is this repository's");
+}
+
+test "a file over its baseline fails at each line and one under it asks for a lower count" {
+    final over = judge({"internal/a.go": [3, 9]}, baseline: {"internal/a.go": 1});
+    assert\equal(over.len(), want: 2, message: "both lines");
+    assert\equal(over[0].line, want: 3, message: "first line");
+    final under = judge({"internal/a.go": [3]}, baseline: {"internal/a.go": 2});
+    assert\equal(under.len(), want: 1, message: "one row finding");
+    assert\equal(under[0].hint, want: "Lower the count to 1: the baseline only shrinks.", message: "shrink");
+}
+
+test "a file with no row allows none and a row for a clean file is deleted" {
+    assert\equal(judge({"cmd/a.go": [2]}, baseline: {<str: int>}).len(), want: 1, message: "no row");
+    final gone = judge({<str: [int]>}, baseline: {"cmd/a.go": 1});
+    assert\equal(gone[0].hint, want: "Delete the row: the baseline only shrinks.", message: "gone");
+}
+
+test "the baseline reads from the analyzers.yaml key" {
+    final got = counts(KEY + ":\n  baseline:\n    internal/a.go: 2\n");
+    assert\equal(got["internal/a.go"] ?? 0, want: 2, message: "count");
+}
