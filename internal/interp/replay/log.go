@@ -32,6 +32,8 @@ type Log struct {
 	open map[int]Call
 	// imports is whether the record holds its imports line or the line saying why not.
 	imports bool
+	// syncs counts the line syncs, so a test can see which begin lines were flushed.
+	syncs int
 }
 
 // OpenLog opens the record of ref under dir for appending, writing h first when the
@@ -155,9 +157,10 @@ func sameHeader(a, b Header) bool {
 	return a.Format == b.Format && a.Script == b.Script && slices.Equal(a.Args, b.Args)
 }
 
-// begin appends e's begin line and syncs it to disk before returning, so a call that
-// runs has a line a reboot keeps. e must be open, and its Seq not already open.
-func (r *Log) begin(e Call) error {
+// begin appends e's begin line; with sync set it is on disk before the call runs. A
+// sync flushes every earlier line too, since lines are ordered appends to one file.
+// e must be open, its Seq not.
+func (r *Log) begin(e Call, sync bool) error {
 	if e.End != callOpen {
 		return fmt.Errorf("replay: begin %d %s: a begun call is open, not %q", e.Seq, e.Name, e.End)
 	}
@@ -166,7 +169,7 @@ func (r *Log) begin(e Call) error {
 	if _, ok := r.open[e.Seq]; ok {
 		return fmt.Errorf("replay: begin %d %s: call %d is already open", e.Seq, e.Name, e.Seq)
 	}
-	if err := r.append(e, true); err != nil {
+	if err := r.append(e, sync); err != nil {
 		return err
 	}
 	r.open[e.Seq] = e
@@ -180,7 +183,8 @@ type outcome struct {
 }
 
 // end appends the end line of the open call seq, returned or raised. The line is not
-// synced: the next begin or Close syncs it, and a reboot before then leaves the call open.
+// synced: the next synced begin, Finish or Close flushes it, and a reboot before then
+// leaves the call open.
 func (r *Log) end(seq int, end callEnd, o outcome) error {
 	if end != callReturned && end != callRaised {
 		return fmt.Errorf("replay: end %d: a call ends returned or raised, not %q", seq, end)
@@ -229,8 +233,16 @@ func (r *Log) append(v any, sync bool) error {
 		if err := r.f.Sync(); err != nil {
 			return fmt.Errorf("replay: sync %s: %w", r.path, err)
 		}
+		r.syncs++
 	}
 	return nil
+}
+
+// syncCount is how many lines append has synced.
+func (r *Log) syncCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.syncs
 }
 
 // Read returns the record of ref under dir: its header, and its calls in seq order with

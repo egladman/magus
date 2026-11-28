@@ -30,8 +30,8 @@ func call(seq, parent int, name string) Call {
 func (s *StoreSuite) TestStoreFoldsBeginAndEnd() {
 	r, err := OpenLog(s.dir, "out1", s.header)
 	s.Require().NoError(err)
-	s.Require().NoError(r.begin(call(0, -1, "fs.readFile")))
-	s.Require().NoError(r.begin(call(1, 0, "os.time")))
+	s.Require().NoError(r.begin(call(0, -1, "fs.readFile"), true))
+	s.Require().NoError(r.begin(call(1, 0, "os.time"), true))
 	s.Require().NoError(r.end(1, callReturned, outcome{Result: "12"}))
 	s.Require().NoError(r.noteImports(map[string]string{"/w/lib.buzz": "ab12"}))
 	s.Require().NoError(r.end(0, callRaised, outcome{Error: "no such file"}))
@@ -56,9 +56,9 @@ func (s *StoreSuite) TestStoreFoldsBeginAndEnd() {
 func (s *StoreSuite) TestStoreLeavesACrashedCallOpen() {
 	r, err := OpenLog(s.dir, "out1", s.header)
 	s.Require().NoError(err)
-	s.Require().NoError(r.begin(call(0, -1, "os.time")))
+	s.Require().NoError(r.begin(call(0, -1, "os.time"), true))
 	s.Require().NoError(r.end(0, callReturned, outcome{Result: "1"}))
-	s.Require().NoError(r.begin(call(1, -1, "proc.exec")))
+	s.Require().NoError(r.begin(call(1, -1, "proc.exec"), true))
 	s.Require().NoError(r.Close())
 	// A torn end line is what a reboot mid-write leaves.
 	path := filepath.Join(s.dir, "out1", "calls.jsonl")
@@ -78,7 +78,7 @@ func (s *StoreSuite) TestStoreLeavesACrashedCallOpen() {
 	again, err := OpenLog(s.dir, "out1", s.header)
 	s.Require().NoError(err, "a dead writer's record opens to append")
 	s.Require().NoError(again.end(1, callReturned, outcome{Result: `"ok"`}))
-	s.Require().NoError(again.begin(call(2, -1, "os.time")))
+	s.Require().NoError(again.begin(call(2, -1, "os.time"), true))
 	s.Require().NoError(again.Close())
 	_, calls, err = Read(s.dir, "out1")
 	s.Require().NoError(err)
@@ -137,9 +137,9 @@ func (s *StoreSuite) TestBeginAndEndRefuseWhatTheyCannotRecord() {
 	s.Require().NoError(err)
 	ended := call(0, -1, "os.time")
 	ended.End = callReturned
-	s.ErrorContains(r.begin(ended), "a begun call is open")
-	s.Require().NoError(r.begin(call(0, -1, "os.time")))
-	s.ErrorContains(r.begin(call(0, -1, "os.time")), "already open")
+	s.ErrorContains(r.begin(ended, true), "a begun call is open")
+	s.Require().NoError(r.begin(call(0, -1, "os.time"), true))
+	s.ErrorContains(r.begin(call(0, -1, "os.time"), true), "already open")
 	s.ErrorContains(r.end(5, callReturned, outcome{Result: "1"}), "no open call has that seq")
 	s.ErrorContains(r.end(0, callOpen, outcome{}), "ends returned or raised")
 	s.Require().NoError(r.Close())
@@ -149,7 +149,7 @@ func (s *StoreSuite) TestBeginAndEndRefuseWhatTheyCannotRecord() {
 func (s *StoreSuite) TestAFinishedRecordIsMarkedAndRefusesAppends() {
 	r, err := OpenLog(s.dir, "out1", s.header)
 	s.Require().NoError(err)
-	s.Require().NoError(r.begin(call(0, -1, "os.time")))
+	s.Require().NoError(r.begin(call(0, -1, "os.time"), true))
 	s.Require().NoError(r.end(0, callReturned, outcome{Result: "1"}))
 	done, err := Finished(s.dir, "out1")
 	s.Require().NoError(err)

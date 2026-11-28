@@ -1,9 +1,12 @@
 package replay
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -303,6 +306,60 @@ func (s *PlayerSuite) TestARunThatDoesLessIsRefused() {
 	err = p.Unreplayed()
 	s.ErrorIs(err, RefusalDiverged)
 	s.ErrorContains(err, "ended with 2 recorded calls not made")
+}
+
+// mixedScript interleaves a native that may not repeat (probe.count) with a read that
+// may (fs.readFile), so a log cut anywhere loses lines of both kinds.
+const mixedScript = `
+import "probe";
+import "fs";
+final a = probe\count(1);
+final b = fs\readFile("x");
+final c = probe\count(2);
+final d = fs\readFile("y");
+final e = probe\count(3);
+`
+
+// Every line is an append to one file, and a sync flushes all before it, so a reboot
+// can only cut the log's tail. Each cut leaves calls that are a prefix of the full
+// record, each either whole or open. Resuming then succeeds, or refuses outcome-unknown
+// at a call that may not repeat.
+func (s *PlayerSuite) TestALogCutAtAnyByteResumesOrRefusesOutcomeUnknown() {
+	s.Require().NoError(s.record(mixedScript))
+	path := filepath.Join(s.dir, "out1", recordFile)
+	full, err := os.ReadFile(path)
+	s.Require().NoError(err)
+	_, recorded, err := Read(s.dir, "out1")
+	s.Require().NoError(err)
+
+	for cut := bytes.IndexByte(full, '\n') + 1; cut <= len(full); cut++ {
+		s.Require().NoError(os.WriteFile(path, full[:cut], 0o644))
+		_, calls, err := Read(s.dir, "out1")
+		s.Require().NoError(err, "cut at byte %d", cut)
+		s.requirePrefixOf(recorded, calls, cut)
+
+		s.ran = map[string]int{}
+		p, runErr := s.replay(mixedScript)
+		if refusal := p.Err(); refusal != nil {
+			s.Require().ErrorIs(refusal, RefusalOutcomeUnknown, "cut at byte %d", cut)
+			s.Require().ErrorContains(refusal, "probe.count", "only a call that may not repeat is refused")
+			continue
+		}
+		s.Require().NoError(runErr, "cut at byte %d", cut)
+	}
+}
+
+// requirePrefixOf fails unless calls are recorded's first calls, each as recorded or
+// still open.
+func (s *PlayerSuite) requirePrefixOf(recorded, calls []Call, cut int) {
+	s.Require().LessOrEqual(len(calls), len(recorded), "cut at byte %d", cut)
+	for i, c := range calls {
+		want := recorded[i]
+		if c.End == callOpen {
+			want.End, want.Result, want.Error, want.Unencodable = callOpen, "", "", ""
+		}
+		s.Require().Equal(want, c, "cut at byte %d, call %d", cut, i)
+	}
 }
 
 func (s *PlayerSuite) importsPlayer() *Player {

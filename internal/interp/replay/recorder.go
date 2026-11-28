@@ -59,16 +59,16 @@ func (p *Recorder) Imports(digests map[string]string) error {
 	return p.rec.noteImports(digests)
 }
 
-// InterceptCall runs call between a synced begin line and an end line, so a reboot inside it
-// leaves the call open. A call that fails while ctx is done stays open too. A begin-line
-// store error fails the call unrun. An end-line one is joined to the call's error and
-// wins. A [vm.Suspend] signal passes through.
+// InterceptCall runs call between a begin line and an end line. A non-repeatable
+// native's begin is on disk before it runs; a lost repeatable one replays live. A call
+// that fails while ctx is done stays open. A begin-line store error fails the call
+// unrun; an end-line one joins the call's error and wins. A [vm.Suspend] passes through.
 func (p *Recorder) InterceptCall(ctx context.Context, name string, args []vm.Value, call vm.Callable) (vm.Value, error) {
 	if p.unreadable != nil {
 		return vm.Null, p.unreadable
 	}
 	e := p.begin(name, args)
-	if err := p.rec.begin(e); err != nil {
+	if err := p.rec.begin(e, !mayRepeat(name)); err != nil {
 		p.finish(e, callReturned, "")
 		return vm.Null, err
 	}

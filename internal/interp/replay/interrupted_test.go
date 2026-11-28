@@ -22,9 +22,9 @@ func (s *StoppedRunsSuite) SetupTest() { s.dir = s.T().TempDir() }
 func (s *StoppedRunsSuite) stopped(ref string, h Header) {
 	r, err := OpenLog(s.dir, ref, h)
 	s.Require().NoError(err)
-	s.Require().NoError(r.begin(call(0, -1, "os.time")))
+	s.Require().NoError(r.begin(call(0, -1, "os.time"), true))
 	s.Require().NoError(r.end(0, callReturned, outcome{Result: "1"}))
-	s.Require().NoError(r.begin(call(1, -1, "proc.exec")))
+	s.Require().NoError(r.begin(call(1, -1, "proc.exec"), true))
 	s.Require().NoError(r.Close())
 }
 

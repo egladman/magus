@@ -200,12 +200,40 @@ func (s *RecorderSuite) TestAnEndErrorWinsAndKeepsTheValue() {
 	s.ErrorContains(err, "is closed")
 }
 
+// syncsDuring runs name through the Recorder and returns the log's sync count as its
+// native saw it.
+func (s *RecorderSuite) syncsDuring(name string) int {
+	var during int
+	_, err := s.rcd.InterceptCall(context.Background(), name, nil, func(context.Context, []vm.Value) (vm.Value, error) {
+		during = s.rec.syncCount()
+		return vm.Null, nil
+	})
+	s.Require().NoError(err)
+	return during
+}
+
+func (s *RecorderSuite) TestOnlyANonRepeatableBeginIsSyncedBeforeItsNativeRuns() {
+	before := s.rec.syncCount()
+	s.Equal(before+1, s.syncsDuring("proc.exec"), "proc.exec may not repeat, so its begin is on disk before it runs")
+	s.Equal(before+1, s.rec.syncCount(), "its end line is not synced")
+	s.Equal(before+1, s.syncsDuring("fs.readFile"), "a read may repeat, so its begin waits for the next sync")
+	s.Equal(before+1, s.rec.syncCount())
+}
+
 // recordedCalls is the run size the ADR's cost figures are measured over.
 const recordedCalls = 10_000
 
 // BenchmarkRecordedRun runs recordedCalls native calls through a Recorder, the path a
-// --record run takes, with a synced begin line per call.
+// --record run takes. Only a call that may not repeat syncs, so the mix sets the cost.
 func BenchmarkRecordedRun(b *testing.B) {
+	b.Run("repeatable=all", func(b *testing.B) { benchRecordedRun(b, 0) })
+	b.Run("repeatable=none", func(b *testing.B) { benchRecordedRun(b, 1) })
+	b.Run("repeatable=4in5", func(b *testing.B) { benchRecordedRun(b, 5) })
+}
+
+// benchRecordedRun makes every nth call proc.exec and the rest fs.readFile. n 0 makes
+// none an exec.
+func benchRecordedRun(b *testing.B, n int) {
 	ctx := context.Background()
 	args := []vm.Value{vm.IntValue(1), vm.StringValue("arg")}
 	native := func(context.Context, []vm.Value) (vm.Value, error) { return vm.StringValue("result"), nil }
@@ -217,8 +245,12 @@ func BenchmarkRecordedRun(b *testing.B) {
 			b.Fatal(err)
 		}
 		r := NewRecorder(rec)
-		for range recordedCalls {
-			if _, err := r.InterceptCall(ctx, "probe.ping", args, native); err != nil {
+		for c := range recordedCalls {
+			name := "fs.readFile"
+			if n > 0 && c%n == 0 {
+				name = "proc.exec"
+			}
+			if _, err := r.InterceptCall(ctx, name, args, native); err != nil {
 				b.Fatal(err)
 			}
 		}
