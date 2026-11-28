@@ -19,7 +19,6 @@ import (
 	"github.com/egladman/magus/internal/contract"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/recorder"
-	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/safetyscissors/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -802,7 +801,7 @@ func mainRefreshFix(root string, judge judgeIdentity) (problem, say string, ok b
 		return "", "", false
 	}
 	problem = fmt.Sprintf("%s, built at %.12s, is older than %s at %.12s and cannot load this tree", bin, judge.commit, base, tip)
-	lines := fmt.Sprintf("`git -C %s pull --ff-only`, then `%s --root %s run go-build %s`", main, bin, main, main)
+	lines := fmt.Sprintf("`git -C %s pull --ff-only`, then `%s --root %s run go-build .`", main, bin, main)
 	if !onBaseBranch(ctx, main) {
 		lines = fmt.Sprintf("`git -C %s switch %s`, %s", main, base, lines)
 	}
@@ -840,8 +839,8 @@ func (f binaryFix) next(rule denyRuleName) []types.NextStep {
 }
 
 // binaryRemedy is the fix for a binary that cannot load the tree at root, by who is asking.
-// In a checkout of magus holding ./magus it is the relink for the root and the
-// integrator, and the placement for a worker.
+// Only own, a checkout of magus itself, gets a line that builds ./cmd/magus;
+// any other workspace is told to install a release.
 func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 	if builds {
 		lease = ""
@@ -860,15 +859,10 @@ func binaryRemedy(own bool, root, lease string, builds bool) binaryFix {
 			fix.why += "\n" + noPlacementScript
 		}
 		return fix
-	case own && hasBinary && ownSourceRoot(root):
+	case own && hasBinary:
 		return binaryFix{
 			say: fmt.Sprintf("rebuild and stamp ./magus with `%s`, alone on its line", bootstrap),
 			why: rebuildWhy,
-		}
-	case own && hasBinary:
-		return binaryFix{
-			say: ward.RelinkAndStampAt(root),
-			why: relinkWhy,
 		}
 	case lease != "":
 		return binaryFix{

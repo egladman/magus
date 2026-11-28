@@ -734,10 +734,55 @@ func (s *WorkerRouteSuite) TestAWorkerIsServedThePlacementTheIndexDeclares() {
 	s.Equal([]string{"<main checkout>/magus", "buzz", "hack/dev/bootstrap-worktree.buzz", "--", "--job", "lease-a", "--from", "<main checkout>"}, next[0].Argv)
 }
 
-func (s *WorkerRouteSuite) TestTheIntegratorWithABinaryIsToldToRelinkIt() {
+func (s *WorkerRouteSuite) TestTheIntegratorWithABinaryIsToldToRebuildIt() {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "go.mod"), []byte(fmt.Sprintf("module %s\n", ownModule)), 0o644))
 	fix := binaryRemedy(true, s.root, "lease-a", true)
-	s.Contains(fix.say, ward.RelinkAt(s.root))
+	s.Contains(fix.say, config.SourceCommand(s.root, "", "", true))
 	s.Empty(fix.placeFor)
+}
+
+// ConsumerWorkspaceSuite pins that a workspace which is not a checkout of
+// magus is never handed a line that only magus's own source can run.
+type ConsumerWorkspaceSuite struct {
+	suite.Suite
+	root     string
+	failures []string
+}
+
+func TestConsumerWorkspaceSuite(t *testing.T) {
+	suite.Run(t, new(ConsumerWorkspaceSuite))
+}
+
+func (s *ConsumerWorkspaceSuite) SetupTest() {
+	s.root = s.T().TempDir()
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "go.mod"), []byte("module example.com/consumer\n"), 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus.yaml"), []byte("checkout:\n  bootstrap: hack/dev/bootstrap-checkout.buzz\n"), 0o644))
+	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus"), []byte("binary"), 0o755))
+	s.failures = []string{`import "./policy": [BZZ1002] buzz: line 3:1: undefined type "Widget"`}
+}
+
+func (s *ConsumerWorkspaceSuite) noSourceLine(text string) {
+	for _, own := range []string{"cmd/magus", "go-build", "GOEXPERIMENT", "bootstrap-checkout", "hack/policy", "go build", "go run"} {
+		s.NotContains(text, own)
+	}
+}
+
+func (s *ConsumerWorkspaceSuite) TestTheRemedyNeverBuildsMagusFromSource() {
+	for _, lease := range []string{"", "lease-a"} {
+		for _, builds := range []bool{false, true} {
+			fix := binaryRemedy(ownSourceRoot(s.root), s.root, lease, builds)
+			s.noSourceLine(fix.say)
+			s.noSourceLine(fix.why)
+		}
+	}
+}
+
+func (s *ConsumerWorkspaceSuite) TestTheDenialNeverBuildsMagusFromSource() {
+	for _, cause := range []unloadKind{unloadStale, unloadNoBinary} {
+		d := staleBinaryDenial(judgedCall{what: "this command", builds: true}, cause, s.failures, ownSourceRoot(s.root), s.root)
+		s.noSourceLine(d.Say)
+		s.noSourceLine(d.Why)
+	}
 }
 
 func (s *WorkerRouteSuite) TestAWorkerWithNoBinaryAsksForAPlacement() {
@@ -1252,8 +1297,12 @@ func (s *MainRefreshSuite) deny() denial {
 func (s *MainRefreshSuite) TestTheOrchestratorIsToldToRefreshTheMainCheckout() {
 	d := s.deny()
 	s.Contains(d.Say, fmt.Sprintf("%s/magus, built at %.12s, is older than main at %.12s", s.main, s.judge.commit, s.tip))
-	s.Contains(d.Say, fmt.Sprintf("`git -C %[1]s pull --ff-only`, then `%[1]s/magus --root %[1]s run go-build %[1]s`, each alone on its line", s.main))
+	s.Contains(d.Say, fmt.Sprintf("`git -C %[1]s pull --ff-only`, then `%[1]s/magus --root %[1]s run go-build .`, each alone on its line", s.main))
 	s.NotContains(d.Say, "\n")
+}
+
+func (s *MainRefreshSuite) TestTheRefreshNamesTheProjectAsDotNotAnAbsolutePath() {
+	s.NotContains(s.deny().Say, "go-build "+s.main)
 }
 
 func (s *MainRefreshSuite) TestADetachedMainCheckoutSwitchesBackFirst() {
