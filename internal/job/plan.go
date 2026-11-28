@@ -378,11 +378,26 @@ func differentCheckout(rec job.Declaration, bound string) (message, fix string) 
 		fmt.Sprintf("drop checkout, or fork a new job for %s with `%s`", rec.Checkout, hint.JobFork.With("--stdin"))
 }
 
-// widensWritePaths reports whether rec names a write path prev's do not cover.
+// widensWritePaths reports whether rec names a write path prev's do not reach. A file
+// prev's claims narrowed is out of reach of a pattern that still names it.
 func widensWritePaths(prev job.Job, rec job.Declaration) bool {
 	var next job.Job
 	rec.ApplySpec(&next)
-	return !job.Subset(next.Paths.Write, prev.Paths.Write)
+	if !job.Subset(next.Paths.Write, prev.Paths.Write) {
+		return true
+	}
+	return slices.ContainsFunc(next.Paths.Write, func(entry string) bool {
+		file, decl := job.SplitClaim(strings.TrimSpace(entry))
+		if decl != "" || strings.ContainsAny(file, "*?[{") {
+			return false
+		}
+		return !slices.ContainsFunc(prev.Paths.Write, func(held string) bool {
+			if _, claim := job.SplitClaim(strings.TrimSpace(held)); claim != "" {
+				return false
+			}
+			return job.PathWithin(file, strings.TrimSpace(held)) && !job.ReleasedReach(prev, held, file)
+		})
+	})
 }
 
 // specMerge is rec's spec as a merge: [job.Declaration.ApplySpec], plus the checkpoint a

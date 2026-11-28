@@ -1209,6 +1209,30 @@ func TestApplyWideningAnExitedOrEndedRowDeclaresItAgain(t *testing.T) {
 	assert.Equal(t, job.StateExited, kept[0].Next.State, "an exited row changed without widening stays its holder's")
 }
 
+func TestApplyWideningAFileTheClaimsNarrowedDeclaresTheEndedRowAgain(t *testing.T) {
+	t.Parallel()
+
+	s, _ := appliedRow(t, "pkg/*.go")
+	_, err := s.MutateSeeing(t.Context(), "w", job.AsNarrowing, func(cur *job.Job, _ bool, now int64, _ []job.Job) error {
+		cur.Paths.Write = append(cur.Paths.Write, "pkg/a.go#Run")
+		recordNarrowing(cur, "pkg/a.go", "", now, "digest")
+		return nil
+	})
+	require.NoError(t, err)
+	_, err = s.Update(t.Context(), "w", func(u *job.Job) { u.State = job.StateExited })
+	require.NoError(t, err)
+	held, err := s.List(t.Context())
+	require.NoError(t, err)
+	require.True(t, job.Narrowed(held[0], "pkg/a.go"), "%+v", held[0].Releases)
+
+	got, err := Apply(t.Context(), s, []job.Declaration{spec("pkg/*.go", "pkg/a.go")}, config.Jobs{}, nil, nil, false)
+	require.NoError(t, err)
+	assert.Equal(t, job.StateDeclared, got[0].Next.State, "naming the narrowed file whole declares the row again")
+	rows, err := s.List(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, job.StateDeclared, rows[0].State)
+}
+
 // A new id is a fork: declared, with this checkout's checkpoint when the record names none.
 func TestApplyCreatesANewJob(t *testing.T) {
 	t.Parallel()
