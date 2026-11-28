@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1451,6 +1452,86 @@ func (s *BinaryPinSuite) TestTheCacheCompactsToOneEntryPerPath() {
 	read, err := codec.ReadLines(cache.Path())
 	s.Require().NoError(err)
 	s.Len(read.Lines, 1)
+}
+
+// KeptBuildSuite pins the build a refused fork leaves for the next fork at its commit.
+// It swaps the default logger, so it runs alone.
+type KeptBuildSuite struct {
+	suite.Suite
+	store    *Store
+	repo     *testkit.Repo
+	said     strings.Builder
+	previous *slog.Logger
+}
+
+func TestKeptBuildSuite(t *testing.T) { suite.Run(t, new(KeptBuildSuite)) }
+
+func (s *KeptBuildSuite) SetupTest() {
+	s.store, _, s.repo = worktreeStore(s.T())
+	s.said.Reset()
+	s.previous = slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&s.said, nil)))
+}
+
+func (s *KeptBuildSuite) TearDownTest() { slog.SetDefault(s.previous) }
+
+// refusedFork makes w1's checkout at checkpoint, builds a ./magus in it as build, and
+// discards it the way a refused fork does.
+func (s *KeptBuildSuite) refusedFork(checkpoint string, build types.MagusBuild) {
+	wt, made, err := s.store.ForkWorktree(s.T().Context(), "w1", filepath.Join(s.T().TempDir(), "w1"), checkpoint, "")
+	s.Require().NoError(err)
+	s.Require().True(made)
+	s.Require().NoError(os.WriteFile(filepath.Join(wt.Root, "magus"), []byte(versionScript("refused", build)), 0o755))
+	s.Require().NoError(s.store.DiscardWorktree(s.T().Context(), wt))
+	s.Require().NoDirExists(wt.Root)
+}
+
+// retry forks w1 again at checkpoint and places what PlaceBuiltBinary finds there.
+func (s *KeptBuildSuite) retry(checkpoint string) (job.Worktree, string) {
+	wt, made, err := s.store.ForkWorktree(s.T().Context(), "w1", filepath.Join(s.T().TempDir(), "again"), checkpoint, "")
+	s.Require().NoError(err)
+	s.Require().True(made)
+	placed, err := s.store.PlaceBuiltBinary(s.T().Context(), wt.Base, wt.Root)
+	s.Require().NoError(err)
+	return wt, placed
+}
+
+func (s *KeptBuildSuite) TestARefusedForksBuildIsPlacedInTheRetry() {
+	base := s.repo.Head()
+	s.refusedFork(base, types.MagusBuild{Version: "v0.5.0", Commit: base})
+	s.Contains(s.said.String(), "for the next fork at that commit")
+
+	wt, placed := s.retry(base)
+	s.Equal(s.store.keptBuild(), placed)
+	body, err := os.ReadFile(filepath.Join(wt.Root, "magus"))
+	s.Require().NoError(err)
+	s.Contains(string(body), "# refused\n")
+}
+
+func (s *KeptBuildSuite) TestADirtyBuildIsNotKept() {
+	base := s.repo.Head()
+	s.refusedFork(base, types.MagusBuild{Version: "v0.5.0-dirty", Commit: base})
+	s.NoFileExists(s.store.keptBuild())
+
+	_, placed := s.retry(base)
+	s.Empty(placed)
+}
+
+func (s *KeptBuildSuite) TestAKeptBuildIsNotPlacedAtAnotherCommit() {
+	base := s.repo.Head()
+	s.refusedFork(base, types.MagusBuild{Version: "v0.5.0", Commit: base})
+	s.repo.Git("commit", "-q", "--allow-empty", "-m", "newer")
+
+	wt, placed := s.retry(s.repo.Head())
+	s.Empty(placed)
+	s.NoFileExists(filepath.Join(wt.Root, "magus"))
+}
+
+func (s *KeptBuildSuite) TestAForkHandedNoBinarySaysItPlacesNone() {
+	wt, made, err := s.store.ForkWorktree(s.T().Context(), "w1", filepath.Join(s.T().TempDir(), "w1"), "", "")
+	s.Require().NoError(err)
+	s.Require().True(made)
+	s.Contains(s.said.String(), "placing no magus in "+wt.Root)
 }
 
 // dirWith is a temp root holding the named directories.

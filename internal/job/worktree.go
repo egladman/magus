@@ -114,9 +114,13 @@ func (s *Store) ForkWorktree(ctx context.Context, id, dir, checkpoint, binary st
 		return job.Worktree{}, false, fmt.Errorf("job: %s's checkout at %s: %w", id, dir, err)
 	}
 	wt = job.Worktree{Root: dir, Source: source, Base: base.ID, Created: time.Now().Unix(), Made: true}
-	if binary != "" && !BuildsItsOwnMagus(dir) && !builtAt(ctx, binary, base.ID) {
+	switch {
+	case BuildsItsOwnMagus(dir):
+	case binary == "":
+		slog.InfoContext(ctx, fmt.Sprintf("placing no magus in %s: the forking magus is not its checkout's ./magus, so the job runs the magus it finds", dir), attr.Notice("note"))
+	case !builtAt(ctx, binary, base.ID):
 		slog.InfoContext(ctx, fmt.Sprintf("not placing %s in %s: it is not a clean build at %.12s", binary, dir, base.ID), attr.Notice("note"))
-	} else if binary != "" && !BuildsItsOwnMagus(dir) {
+	default:
 		placed, err := placeBinary(binary, dir)
 		if err != nil {
 			return job.Worktree{}, false, errors.Join(fmt.Errorf("placing %s in %s: %w", binary, dir, err), drv.DiscardCheckout(ctx, source, dir, base.ID))
@@ -262,16 +266,16 @@ func (s *Store) RowLive(ctx context.Context, id string) (bool, error) {
 }
 
 // PlaceBuiltBinary copies into dir a ./magus built at base with nothing
-// uncommitted: the first of exes, else one a standing checkout at base holds.
-// It returns the source, or "" when none is. Each candidate's own version
-// says what it holds, since a binary can outlive its row's base. dir's own
+// uncommitted: the first of exes, else the build [Store.DiscardWorktree] kept,
+// else one a standing checkout at base holds. It returns the source, or ""
+// when none is. Each candidate's own version says what it holds. dir's own
 // ./magus may be anyone's build, so it is skipped.
 func (s *Store) PlaceBuiltBinary(ctx context.Context, base, dir string, exes ...string) (string, error) {
 	rows, err := s.List(ctx)
 	if err != nil {
 		return "", err
 	}
-	candidates := slices.Clone(exes)
+	candidates := append(slices.Clone(exes), s.keptBuild())
 	for _, r := range rows {
 		if r.Worktree.Standing() && r.Worktree.Base == base && r.Worktree.Binary != "" {
 			candidates = append(candidates, r.Worktree.Binary)
@@ -919,24 +923,57 @@ func ShortRevision(id string) string {
 
 // DiscardWorktree removes a checkout [Store.ForkWorktree] just made for a fork that was then
 // refused, before anything ran in it.
-// Its branch goes too while it sits at the base.
+// Its branch goes too while it sits at the base. A clean ./magus built at the base is
+// kept first, so a fork of the same commit places it rather than building again.
 func (s *Store) DiscardWorktree(ctx context.Context, wt job.Worktree) error {
 	drv, why := resolveDriver(ctx, wt.Source)
 	if drv == nil {
 		return fmt.Errorf("job: the checkout %s stays, since %s", wt.Root, why)
 	}
+	s.keepBuild(ctx, wt)
 	return drv.DiscardCheckout(ctx, wt.Source, wt.Root, wt.Base)
 }
 
-// placeBinary copies bin into dir by temp and rename, never in place: on darwin a later
-// exec of an executable rewritten in place is killed.
+// keptBuildName is the one build kept beside the job store, shared by every checkout
+// of the repository. Each discard overwrites it, so it holds at most one binary.
+const keptBuildName = "kept-magus"
+
+// keptBuild is where [Store.DiscardWorktree] keeps a build, "" for a store that did not open.
+func (s *Store) keptBuild() string {
+	if s.err != nil {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(s.path), keptBuildName)
+}
+
+// keepBuild copies wt's ./magus to [Store.keptBuild] when it is a clean build at wt's
+// base. A failed copy loses only the reuse, so it is said and not returned.
+func (s *Store) keepBuild(ctx context.Context, wt job.Worktree) {
+	bin, kept := filepath.Join(wt.Root, binaryName), s.keptBuild()
+	if kept == "" || !builtAt(ctx, bin, wt.Base) {
+		return
+	}
+	if err := copyBinary(bin, kept); err != nil {
+		slog.InfoContext(ctx, fmt.Sprintf("not keeping %s, built at %.12s, for the next fork: %s", bin, wt.Base, err), attr.Notice("note"))
+		return
+	}
+	slog.InfoContext(ctx, fmt.Sprintf("kept %s, built at %.12s, as %s for the next fork at that commit", bin, wt.Base, kept), attr.Notice("note"))
+}
+
+// placeBinary copies bin into dir as its ./magus.
 func placeBinary(bin, dir string) (string, error) {
+	dst := filepath.Join(dir, binaryName)
+	return dst, copyBinary(bin, dst)
+}
+
+// copyBinary copies bin to dst by temp and rename, never in place: on darwin a later
+// exec of an executable rewritten in place is killed.
+func copyBinary(bin, dst string) error {
 	body, err := os.ReadFile(bin)
 	if err != nil {
-		return "", err
+		return err
 	}
-	dst := filepath.Join(dir, binaryName)
-	return dst, file.WriteFileAtomic(dst, body, 0o755)
+	return file.WriteFileAtomic(dst, body, 0o755)
 }
 
 // BinaryDigest is the content hash of the file at bin, "sha256:<hex>".
