@@ -12,17 +12,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The renderer's refusals past the parser's. types/emit.go holds MGS1064 to MGS1070.
-const (
-	emitNoEncoding   types.DiagnosticCode = "MGS1071"
-	emitUnknownSpec  types.DiagnosticCode = "MGS1072"
-	emitWrongKind    types.DiagnosticCode = "MGS1073"
-	emitRefusedValue types.DiagnosticCode = "MGS1074"
-	emitConversion   types.DiagnosticCode = "MGS1075"
-	emitBlockShape   types.DiagnosticCode = "MGS1076"
-	emitBadShape     types.DiagnosticCode = "MGS1077"
-)
-
 const (
 	specBlock = "block"
 	specRaw   = "raw"
@@ -99,20 +88,20 @@ func (e *encoder) pattern(src string) (*regexp.Regexp, error) {
 // refusal, under the code returned beside it.
 func (e *encoder) encode(enc spells.Encoding, v string) (string, types.DiagnosticCode, string) {
 	if !utf8.ValidString(v) {
-		return "", emitRefusedValue, fmt.Sprintf("the value is not valid UTF-8, so :%s refuses it", enc.Name)
+		return "", types.EmitRefusedValue, fmt.Sprintf("the value is not valid UTF-8, so :%s refuses it", enc.Name)
 	}
 	if enc.Pattern != "" {
 		re, err := e.pattern(enc.Pattern)
 		if err != nil {
-			return "", emitUnknownSpec, fmt.Sprintf("encoding %q declares a pattern that does not compile: %v", enc.Name, err)
+			return "", types.EmitUnknownEncoding, fmt.Sprintf("encoding %q declares a pattern that does not compile: %v", enc.Name, err)
 		}
 		if !re.MatchString(v) {
-			return "", emitRefusedValue, fmt.Sprintf("%q does not match what :%s accepts (%s)", v, enc.Name, enc.Pattern)
+			return "", types.EmitRefusedValue, fmt.Sprintf("%q does not match what :%s accepts (%s)", v, enc.Name, enc.Pattern)
 		}
 	}
 	for _, r := range enc.Reserved {
 		if v == r {
-			return "", emitRefusedValue, fmt.Sprintf("%q is reserved, so :%s refuses it", v, enc.Name)
+			return "", types.EmitRefusedValue, fmt.Sprintf("%q is reserved, so :%s refuses it", v, enc.Name)
 		}
 	}
 	var b strings.Builder
@@ -126,7 +115,7 @@ func (e *encoder) encode(enc spells.Encoding, v string) (string, types.Diagnosti
 		r, size := utf8.DecodeRuneInString(v[i:])
 		if r < 0x20 || r == 0x7f {
 			if enc.Control == "" {
-				return "", emitRefusedValue, fmt.Sprintf("the value holds control character U+%04X, which :%s cannot write", r, enc.Name)
+				return "", types.EmitRefusedValue, fmt.Sprintf("the value holds control character U+%04X, which :%s cannot write", r, enc.Name)
 			}
 			b.WriteString(controlText(enc.Control, byte(r)))
 		} else {

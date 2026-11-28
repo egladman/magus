@@ -1,6 +1,7 @@
 package emit
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -55,9 +56,9 @@ func (s *RenderSuite) TestRawCopiesTheValueAndRefusesTheRisky() {
 	s.Equal("a !? b", out)
 
 	_, ps = s.render(tmpl([]string{"", ""}, hole("x", "", "raw", "")))
-	s.Equal([]types.DiagnosticCode{emitRefusedValue}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitRefusedValue}, s.codes(ps))
 	_, ps = s.render(tmpl([]string{"", ""}, hole("x", "", "raw", "a\nb")))
-	s.Equal([]types.DiagnosticCode{emitRefusedValue}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitRefusedValue}, s.codes(ps))
 }
 
 func (s *RenderSuite) TestBangSWritesAScalarAsText() {
@@ -67,49 +68,49 @@ func (s *RenderSuite) TestBangSWritesAScalarAsText() {
 	s.Equal("port 8080 true 1.5", out)
 
 	_, ps = s.render(tmpl([]string{"", ""}, hole("t", "s", "raw", types.Template{Strings: []string{""}})))
-	s.Equal([]types.DiagnosticCode{emitWrongKind}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitWrongKind}, s.codes(ps))
 }
 
 func (s *RenderSuite) TestOtherConversionsAreRefused() {
 	for _, c := range []string{"r", "a"} {
 		_, ps := s.render(tmpl([]string{"", ""}, hole("x", c, "raw", "v")))
-		s.Equal([]types.DiagnosticCode{emitConversion}, s.codes(ps))
+		s.Equal([]types.DiagnosticCode{types.EmitConversion}, s.codes(ps))
 	}
 }
 
 func (s *RenderSuite) TestKindsAreChecked() {
 	_, ps := s.render(tmpl([]string{"", ""}, hole("port", "", "raw", 80)))
-	s.Equal([]types.DiagnosticCode{emitWrongKind}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitWrongKind}, s.codes(ps))
 	s.Contains(ps[0].Message, "{{port!s:raw}}")
 
 	_, ps = s.render(tmpl([]string{"", ""}, hole("body", "", "block", "text")))
-	s.Equal([]types.DiagnosticCode{emitWrongKind}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitWrongKind}, s.codes(ps))
 	s.Contains(ps[0].Message, `emit\text`)
 
 	_, ps = s.render(tmpl([]string{"", ""}, hole("n", "", "ident", types.Template{Strings: []string{""}})))
-	s.Equal([]types.DiagnosticCode{emitWrongKind}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitWrongKind}, s.codes(ps))
 }
 
 func (s *RenderSuite) TestAHoleWithNoEncodingIsRefused() {
 	_, ps := s.render(tmpl([]string{"", ""}, hole("pkg", "", "", "p")))
-	s.Equal([]types.DiagnosticCode{emitNoEncoding}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitNoEncoding}, s.codes(ps))
 }
 
 func (s *RenderSuite) TestAnUnknownEncodingNamesWhatExists() {
 	_, ps := s.render(tmpl([]string{"", ""}, hole("v", "", "comment", "p")))
-	s.Equal([]types.DiagnosticCode{emitUnknownSpec}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitUnknownEncoding}, s.codes(ps))
 	s.Contains(ps[0].Message, "block, ident, raw, string")
 
 	_, ps = Render(tmpl([]string{"", ""}, hole("v", "", "string", "p")), "a.yaml", goIndex())
-	s.Equal([]types.DiagnosticCode{emitUnknownSpec}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitUnknownEncoding}, s.codes(ps))
 	s.Contains(ps[0].Message, ".yaml")
 }
 
 func (s *RenderSuite) TestEncodingsRefuseWhatTheyCannotWrite() {
 	_, ps := s.render(tmpl([]string{"", ""}, hole("n", "", "ident", "type")))
-	s.Equal([]types.DiagnosticCode{emitRefusedValue}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitRefusedValue}, s.codes(ps))
 	_, ps = s.render(tmpl([]string{"", ""}, hole("n", "", "ident", "two words")))
-	s.Equal([]types.DiagnosticCode{emitRefusedValue}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitRefusedValue}, s.codes(ps))
 }
 
 func (s *RenderSuite) TestABlockCarriesTheHoleIndentation() {
@@ -136,11 +137,11 @@ func (s *RenderSuite) TestAOneLineBlockIsInline() {
 func (s *RenderSuite) TestAMultiLineBlockSharingALineIsRefused() {
 	inner := tmpl([]string{"a\nb\n"})
 	_, ps := s.render(tmpl([]string{"x = ", "\n"}, hole("body", "", "block", inner)))
-	s.Equal([]types.DiagnosticCode{emitBlockShape}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitBlockShape}, s.codes(ps))
 	s.Equal(2, ps[0].Line)
 
 	_, ps = s.render(tmpl([]string{"\t", " tail\n"}, hole("body", "", "block", inner)))
-	s.Equal([]types.DiagnosticCode{emitBlockShape}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitBlockShape}, s.codes(ps))
 }
 
 func (s *RenderSuite) TestAnEmptyBlockOnItsOwnLineRemovesTheLine() {
@@ -165,20 +166,20 @@ func (s *RenderSuite) TestBlocksNestAndRenderWithTheSameEncodings() {
 func (s *RenderSuite) TestANestedRefusalSaysWhereItSits() {
 	leaf := types.Template{Strings: []string{"\n", ""}, Interpolations: []types.Interpolation{hole("n", "", "ident", "type")}, Source: "leaf.go.tmpl"}
 	_, ps := s.render(tmpl([]string{"", ""}, hole("leaf", "", "block", leaf)))
-	s.Equal([]types.DiagnosticCode{emitRefusedValue}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitRefusedValue}, s.codes(ps))
 	s.Contains(ps[0].Message, "leaf.go.tmpl:3")
 }
 
 func (s *RenderSuite) TestEveryRefusalIsReportedWithItsLine() {
 	_, ps := s.render(tmpl([]string{"a\n", "\n", "\n", ""},
 		hole("x", "", "", "v"), hole("y", "r", "raw", "v"), hole("z", "", "raw", 1)))
-	s.Equal([]types.DiagnosticCode{emitNoEncoding, emitConversion, emitWrongKind}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitNoEncoding, types.EmitConversion, types.EmitWrongKind}, s.codes(ps))
 	s.Equal([]int{3, 4, 5}, []int{ps[0].Line, ps[1].Line, ps[2].Line})
 }
 
 func (s *RenderSuite) TestAMalformedTemplateIsRefused() {
 	_, ps := s.render(types.Template{Strings: []string{"a"}, Interpolations: []types.Interpolation{hole("x", "", "raw", "v")}})
-	s.Equal([]types.DiagnosticCode{emitBadShape}, s.codes(ps))
+	s.Equal([]types.DiagnosticCode{types.EmitBadShape}, s.codes(ps))
 }
 
 func (s *RenderSuite) TestAParsedFileRendersByteForByte() {
@@ -210,4 +211,18 @@ func (s *RenderSuite) TestJoinPutsTheSeparatorBetweenPartsOnly() {
 	empty := Join(nil, ", ")
 	s.Equal([]string{""}, empty.Strings)
 	s.Empty(empty.Interpolations)
+}
+
+func (s *RenderSuite) TestAHoleWithNoExpressionIsStillNamed() {
+	_, ps := s.render(tmpl([]string{"", ""}, hole("", "", "", "x")))
+	s.Require().Len(ps, 1)
+	s.True(strings.HasPrefix(ps[0].Message, "an emit\\hole value with no expression names no encoding"), ps[0].Message)
+}
+
+func (s *RenderSuite) TestAnUnknownEncodingNamesTheLanguageWhenTheSpellIsUnknown() {
+	index := map[string]spells.LanguageEncodings{".go": {Language: "go"}}
+	_, ps := Render(tmpl([]string{"", ""}, hole("x", "", "path", "a")), "a.go", index)
+	s.Require().Len(ps, 1)
+	s.Equal(types.EmitUnknownEncoding, ps[0].Code)
+	s.Equal("the spell declaring go declares no path encoding for .go (a.go); block, raw exist. add it to the spell's mgs_getLanguage, or encode in Buzz and name raw", ps[0].Message)
 }

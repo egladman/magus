@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 )
 
 type EncodeSuite struct{ suite.Suite }
@@ -80,7 +81,7 @@ func (s *EncodeSuite) TestInvalidUTF8IsRefused() {
 
 func (s *EncodeSuite) TestAPatternThatDoesNotCompileIsReported() {
 	_, code, msg := newEncoder().encode(spells.Encoding{Name: "q", Pattern: "("}, "a")
-	s.Equal(emitUnknownSpec, code)
+	s.Equal(types.EmitUnknownEncoding, code)
 	s.Contains(msg, "does not compile")
 }
 

@@ -55,7 +55,7 @@ type refuse func(types.DiagnosticCode, string)
 
 func (r *renderer) render(t types.Template) string {
 	if len(t.Strings) != len(t.Interpolations)+1 {
-		r.probs = append(r.probs, Problem{emitBadShape, 0, 0, fmt.Sprintf(
+		r.probs = append(r.probs, Problem{types.EmitBadShape, 0, 0, fmt.Sprintf(
 			"a template with %d holes holds %d strings; this one holds %d",
 			len(t.Interpolations), len(t.Interpolations)+1, len(t.Strings))})
 		return ""
@@ -108,22 +108,25 @@ func isBlank(s string) bool { return strings.Trim(s, " \t") == "" }
 
 // hole renders one interpolation. drop asks the caller to remove the hole's line.
 func (r *renderer) hole(h types.Interpolation, prefix string, alone bool, at place, fail refuse) (text string, drop, ok bool) {
+	if h.Expression == "" {
+		h.Expression = "an emit\\hole value with no expression"
+	}
 	switch h.Conversion {
 	case "":
 	case "s":
 		s, isScalar := stringForm(h.Value)
 		if !isScalar {
-			fail(emitWrongKind, fmt.Sprintf("%s is %s, which !s cannot write as text: pass a str, an int, a double or a bool", h.Expression, kindName(h.Value)))
+			fail(types.EmitWrongKind, fmt.Sprintf("%s is %s, which !s cannot write as text: pass a str, an int, a double or a bool", h.Expression, kindName(h.Value)))
 			return "", false, false
 		}
 		h.Value = s
 	default:
-		fail(emitConversion, fmt.Sprintf("!%s is not supported: Buzz has no repr or ascii; write !s or drop the conversion", h.Conversion))
+		fail(types.EmitConversion, fmt.Sprintf("!%s is not supported: Buzz has no repr or ascii; write !s or drop the conversion", h.Conversion))
 		return "", false, false
 	}
 	switch h.FormatSpec {
 	case "":
-		fail(emitNoEncoding, fmt.Sprintf("%s names no encoding; write %s:ident, :string, :block or :raw", h.Expression, h.Expression))
+		fail(types.EmitNoEncoding, fmt.Sprintf("%s names no encoding; write %s:ident, :string, :block or :raw", h.Expression, h.Expression))
 		return "", false, false
 	case specBlock:
 		return r.block(h, prefix, alone, at, fail)
@@ -134,10 +137,10 @@ func (r *renderer) hole(h types.Interpolation, prefix string, alone bool, at pla
 		}
 		switch {
 		case s == "":
-			fail(emitRefusedValue, fmt.Sprintf("%s is empty and :raw refuses that; pass emit\\text(\"\") to a :block hole for nothing", h.Expression))
+			fail(types.EmitRefusedValue, fmt.Sprintf("%s is empty and :raw refuses that; pass emit\\text(\"\") to a :block hole for nothing", h.Expression))
 			return "", false, false
 		case strings.Contains(s, "\n"):
-			fail(emitRefusedValue, fmt.Sprintf("%s holds a line feed and :raw refuses that; pass a template to a :block hole", h.Expression))
+			fail(types.EmitRefusedValue, fmt.Sprintf("%s holds a line feed and :raw refuses that; pass a template to a :block hole", h.Expression))
 			return "", false, false
 		}
 		return s, false, true
@@ -170,7 +173,7 @@ func asString(h types.Interpolation, fail refuse) (string, bool) {
 	if _, isTemplate := asTemplate(h.Value); isTemplate {
 		hint = "write the hole as :block"
 	}
-	fail(emitWrongKind, fmt.Sprintf("%s is %s and :%s takes a str; %s", h.Expression, kindName(h.Value), h.FormatSpec, hint))
+	fail(types.EmitWrongKind, fmt.Sprintf("%s is %s and :%s takes a str; %s", h.Expression, kindName(h.Value), h.FormatSpec, hint))
 	return "", false
 }
 
@@ -190,7 +193,7 @@ func (r *renderer) lookup(h types.Interpolation, fail refuse) (spells.Encoding, 
 	ext := strings.ToLower(filepath.Ext(r.path))
 	lang, claimed := r.index[ext]
 	if !claimed {
-		fail(emitUnknownSpec, fmt.Sprintf("no spell declares a language for %q (%s), so :%s has no meaning; block and raw exist. add the extension to a spell's mgs_getLanguage, or encode in Buzz and name raw", ext, r.path, h.FormatSpec))
+		fail(types.EmitUnknownEncoding, fmt.Sprintf("no spell declares a language for %q (%s), so :%s has no meaning; block and raw exist. add the extension to a spell's mgs_getLanguage, or encode in Buzz and name raw", ext, r.path, h.FormatSpec))
 		return spells.Encoding{}, false
 	}
 	names := []string{specBlock, specRaw}
@@ -201,8 +204,12 @@ func (r *renderer) lookup(h types.Interpolation, fail refuse) (spells.Encoding, 
 		names = append(names, e.Name)
 	}
 	sort.Strings(names)
-	fail(emitUnknownSpec, fmt.Sprintf("spell %s declares no %s encoding for %s (%s); %s exist. add it to the spell's mgs_getLanguage, or encode in Buzz and name raw",
-		lang.Spell, h.FormatSpec, ext, r.path, strings.Join(names, ", ")))
+	owner := "spell " + lang.Spell
+	if lang.Spell == "" {
+		owner = "the spell declaring " + lang.Language
+	}
+	fail(types.EmitUnknownEncoding, fmt.Sprintf("%s declares no %s encoding for %s (%s); %s exist. add it to the spell's mgs_getLanguage, or encode in Buzz and name raw",
+		owner, h.FormatSpec, ext, r.path, strings.Join(names, ", ")))
 	return spells.Encoding{}, false
 }
 
@@ -211,7 +218,7 @@ func (r *renderer) lookup(h types.Interpolation, fail refuse) (spells.Encoding, 
 func (r *renderer) block(h types.Interpolation, prefix string, alone bool, at place, fail refuse) (string, bool, bool) {
 	nested, isTemplate := asTemplate(h.Value)
 	if !isTemplate {
-		fail(emitWrongKind, fmt.Sprintf("%s is %s and :block takes a template; wrap it with emit\\text", h.Expression, kindName(h.Value)))
+		fail(types.EmitWrongKind, fmt.Sprintf("%s is %s and :block takes a template; wrap it with emit\\text", h.Expression, kindName(h.Value)))
 		return "", false, false
 	}
 	mark := len(r.probs)
@@ -228,7 +235,7 @@ func (r *renderer) block(h types.Interpolation, prefix string, alone bool, at pl
 	case len(lines) == 1:
 		return body, false, true
 	case !alone:
-		fail(emitBlockShape, fmt.Sprintf("%s holds %d lines and shares line %d; put the hole on its own line", h.Expression, len(lines), at.line))
+		fail(types.EmitBlockShape, fmt.Sprintf("%s holds %d lines and shares line %d; put the hole on its own line", h.Expression, len(lines), at.line))
 		return "", false, false
 	}
 	var b strings.Builder
