@@ -221,8 +221,8 @@ func TestValidateHarnessToolsRefusesWhatTheGuardCannotRead(t *testing.T) {
 		err   string
 	}{
 		"absolute dir":       {types.HarnessTools{Dir: "/abs"}, "dir must be a workspace-relative path"},
-		"unknown capability": {types.HarnessTools{Dir: "d", Tools: []types.HarnessTool{row("X", "flies")}}, `row 1 (X): capability "flies" is none of runs, reads, writes, spawns, network, inert`},
-		"no capability":      {types.HarnessTools{Dir: "d", Tools: []types.HarnessTool{row("X", "")}}, `row 1 (X): capability "" is none of runs, reads, writes, spawns, network, inert`},
+		"unknown capability": {types.HarnessTools{Dir: "d", Tools: []types.HarnessTool{row("X", "flies")}}, `row 1 (X): capability "flies" is none of runs, reads, writes, spawns, continues, network, inert`},
+		"no capability":      {types.HarnessTools{Dir: "d", Tools: []types.HarnessTool{row("X", "")}}, `row 1 (X): capability "" is none of runs, reads, writes, spawns, continues, network, inert`},
 		"two rows":           {types.HarnessTools{Dir: "d", Tools: []types.HarnessTool{row("X", types.ToolRuns), row("X", types.ToolInert)}}, "row 2: X is declared twice"},
 		"a name with a line": {types.HarnessTools{Dir: "d", Tools: []types.HarnessTool{row("X\nY", types.ToolRuns)}}, "row 1: name must be one non-empty line"},
 	} {

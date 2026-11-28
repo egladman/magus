@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 28459
-skill_short_bytes: 23375
+skill_full_bytes: 28415
+skill_short_bytes: 23331
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `skill-stamp-format` | `magus.skill-stamp/v1alpha1` |
 | `knowledge-api-version` | `magus.knowledge/v1alpha1` |
-| `skill-content` | `ba1eafed7cf9` |
+| `skill-content` | `a1349d24c884` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -163,7 +163,7 @@ Keep the worker's job id, outcome, changed paths, validation refs and unresolved
 Save full records separately. Reuse the spec in `$job_spec` for retries.
 
 ```sh
-magus job fork --stdin --dry-run -o 'template={{.job.id}}{{range .problems}}{{println}}{{.message}}{{end}}{{range .unchecked}}{{println}}{{.}}{{end}}' < "$job_spec"
+magus job fork --stdin --dry-run -o 'template={{range .problems}}{{.code}} {{.message}}{{println}}{{end}}' < "$job_spec"
 ```
 
 Tell person: what changed, passed, remains unverified, decisions needed. Routine claim, handled denial, recorded deviation: not an update; collapse repeats into current blocker + next action.
@@ -632,7 +632,7 @@ spec once in a scratch file (`job_spec` below); do not retype its full exception
 list on every retry:
 
 ```sh
-magus job fork --stdin --dry-run -o 'template={{.job.id}}{{range .problems}}{{println}}{{.message}}{{end}}{{range .unchecked}}{{println}}{{.}}{{end}}' < "$job_spec"
+magus job fork --stdin --dry-run -o 'template={{range .problems}}{{.code}} {{.message}}{{println}}{{end}}' < "$job_spec"
 ```
 
 Tell the person what changed, what passed, what remains unverified, and any decision

@@ -51,6 +51,9 @@ var hookTemplates = []string{
 	// Samples free disk space and may start a reclaim chunk; it judges no call, so it too
 	// declares no coverage.
 	"magus-reclaim-disk.buzz",
+	// Converts a Claude Code notification into a magus event; it judges no call, so it too
+	// declares no coverage.
+	"magus-notify-claude-code.buzz",
 	"codex-hooks.json",
 	"cursor-hook.buzz",
 	// The session-load adapters are shipped artifacts too: version-stamped, embedded
