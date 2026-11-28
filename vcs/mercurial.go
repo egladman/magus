@@ -534,6 +534,38 @@ var hgOperationStates = []struct{ name, op string }{
 	{"graftstate", types.OperationCherryPick},
 }
 
+// hgOperationCommands are program's commands for the operations hgOperationStates names,
+// which Mercurial and Sapling spell alike. Neither has a --skip.
+func hgOperationCommands(program string) []types.OperationCommand {
+	var cmds []types.OperationCommand
+	for _, o := range []struct{ sub, op string }{
+		{"rebase", types.OperationRebase},
+		{"histedit", types.OperationRebase},
+		{"graft", types.OperationCherryPick},
+	} {
+		for _, step := range []string{types.OperationContinue, types.OperationAbort} {
+			cmds = append(cmds, types.OperationCommand{Op: o.op, Step: step, Argv: []string{program, o.sub, "--" + step}})
+		}
+	}
+	return cmds
+}
+
+// OperationCommands implements types.VCSIdentity. A merge is continued by `hg commit`,
+// which records a commit rather than moving an operation on, so only its abort is here.
+func (v hgVCS) OperationCommands() ([]types.OperationCommand, bool) {
+	abortMerge := types.OperationCommand{Op: types.OperationMerge, Step: types.OperationAbort, Argv: []string{"hg", "merge", "--abort"}}
+	return append(hgOperationCommands("hg"), abortMerge), true
+}
+
+// FoldCommand implements types.VCSIdentity. Below the tip only histedit reaches rev,
+// and it asks for a plan interactively.
+func (v hgVCS) FoldCommand(_ string, tip bool) (string, bool) {
+	if !tip {
+		return "", false
+	}
+	return "hg commit --amend", true
+}
+
 // hgOperationInProgress reads the operation from the dot-dir of the checkout holding root,
 // starting no process: a rebase, histedit or graft by its state file, then a merge by its
 // merge state or by the dirstate's second parent, which Sapling sets even when it records

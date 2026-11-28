@@ -3346,12 +3346,19 @@ github.com/egladman/magus/types.Observer type interface
 github.com/egladman/magus/types.Observer.Observe imethod func(GraphEvent)
 github.com/egladman/magus/types.Ok func[T any](v T) Result[T]
 github.com/egladman/magus/types.OnRSSSample func(ctx context.Context, fn func(at time.Duration, bytes int64))
+github.com/egladman/magus/types.OperationAbort const untyped string = "abort"
 github.com/egladman/magus/types.OperationCherryPick const untyped string = "cherry-pick"
+github.com/egladman/magus/types.OperationCommand type struct
+github.com/egladman/magus/types.OperationCommand.Argv field []string
+github.com/egladman/magus/types.OperationCommand.Op field string
+github.com/egladman/magus/types.OperationCommand.Step field string
+github.com/egladman/magus/types.OperationContinue const untyped string = "continue"
 github.com/egladman/magus/types.OperationMerge const untyped string = "merge"
 github.com/egladman/magus/types.OperationRebase const untyped string = "rebase"
 github.com/egladman/magus/types.OperationReporter type interface
 github.com/egladman/magus/types.OperationReporter.OperationInProgress imethod func(ctx context.Context, root string) (string, error)
 github.com/egladman/magus/types.OperationRevert const untyped string = "revert"
+github.com/egladman/magus/types.OperationSkip const untyped string = "skip"
 github.com/egladman/magus/types.OperatorTokenFormat const DiagnosticCode = "MGS9016"
 github.com/egladman/magus/types.Orchestration type string
 github.com/egladman/magus/types.Orchestration.MarshalText method func() ([]byte, error)
@@ -4566,8 +4573,10 @@ github.com/egladman/magus/types.VCSDriver.embeds WorkingCopyReporter
 github.com/egladman/magus/types.VCSIdentity type interface
 github.com/egladman/magus/types.VCSIdentity.Base imethod func() string
 github.com/egladman/magus/types.VCSIdentity.Claims imethod func() []string
+github.com/egladman/magus/types.VCSIdentity.FoldCommand imethod func(rev string, tip bool) (cmd string, ok bool)
 github.com/egladman/magus/types.VCSIdentity.IsSecondaryCheckout imethod func(dir string) bool
 github.com/egladman/magus/types.VCSIdentity.Name imethod func() string
+github.com/egladman/magus/types.VCSIdentity.OperationCommands imethod func() (cmds []OperationCommand, stops bool)
 github.com/egladman/magus/types.VCSIdentity.ParentRef imethod func() string
 github.com/egladman/magus/types.VCSIdentity.ReviewCommand imethod func() string
 github.com/egladman/magus/types.VCSInvocation type struct

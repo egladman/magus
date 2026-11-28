@@ -20,10 +20,9 @@ import (
 // OwedRegeneration is one regeneration a merge left owed: Target run over Project
 // rebuilds Paths, the generated files the merge driver kept one side of.
 //
-// The driver cannot regenerate itself. git invokes it once per conflicted file while the
-// merge is still writing the tree, so a generator started there reads a half-merged
-// checkout. It records what it kept instead, and the settle hooks (SettleHooks) run the
-// record once the tree is whole, alongside whatever else the operation changed.
+// The driver cannot regenerate itself: git invokes it per conflicted file while the
+// merge still writes the tree. It records what it kept instead, and `magus vcs resolve`
+// runs the record once the tree is whole.
 type OwedRegeneration struct {
 	// Project is the project PATH ("." for the root), the form `magus run` accepts.
 	Project string `json:"project"`
@@ -193,4 +192,53 @@ func writeOwed(path string, owed []OwedRegeneration) error {
 		return fmt.Errorf("vcs: write %s: %w", path, err)
 	}
 	return nil
+}
+
+// RangeOwed is what a branch's range owes: the projects to regenerate, and the commit a
+// fold of their outputs rewrites.
+type RangeOwed struct {
+	Base, Head string
+	// Projects are the owing projects, sorted; empty when the range owes nothing.
+	Projects []string
+	// Last is the newest commit in the range that changed an owing project's declared
+	// source, "" when nothing is owed.
+	Last string
+}
+
+// RangeOwes reads what base..head owes: each project generates accepts whose declared
+// source the range changes while none of its declared outputs moves. It is computed from
+// the range and the declarations alone, so an aborted rebase, a dropped commit or a jj
+// rewrite needs no record. An error means unknown, never that nothing is owed.
+func RangeOwes(ctx context.Context, drv types.RangeReporter, dir, base, head string, classify func(context.Context, []string) ([]types.FileEntry, error), generates func(project string) bool) (RangeOwed, error) {
+	owed := RangeOwed{Base: base, Head: head}
+	changed, err := drv.RangeFiles(ctx, dir, base, head, nil)
+	if err != nil {
+		return owed, fmt.Errorf("read the range %s..%s: %w", base, head, err)
+	}
+	if len(changed) == 0 {
+		return owed, nil
+	}
+	files, err := classify(ctx, changed)
+	if err != nil {
+		return owed, fmt.Errorf("classify the range %s..%s: %w", base, head, err)
+	}
+	owed.Projects = slices.DeleteFunc(types.StaleSourceProjects(files), func(p string) bool { return !generates(p) })
+	if len(owed.Projects) == 0 {
+		return owed, nil
+	}
+	var sources []string
+	for _, f := range files {
+		if f.Role == "source" && slices.ContainsFunc(f.SourceOf, func(p string) bool { return slices.Contains(owed.Projects, p) }) {
+			sources = append(sources, f.Path)
+		}
+	}
+	commits, err := drv.RangeCommits(ctx, dir, base, head, sources)
+	if err != nil {
+		return owed, fmt.Errorf("find the commits of %s..%s that changed %s: %w", base, head, strings.Join(owed.Projects, " "), err)
+	}
+	if len(commits) == 0 {
+		return owed, fmt.Errorf("the range %s..%s changed %s, yet no commit in it names those sources", base, head, strings.Join(sources, " "))
+	}
+	owed.Last = commits[0].ID
+	return owed, nil
 }

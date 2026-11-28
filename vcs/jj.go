@@ -69,6 +69,16 @@ func (v jjVCS) BranchHeads(ctx context.Context, root string) (map[string]string,
 // copy being the change, so there is nothing to record before reading it back.
 func (v jjVCS) ReviewCommand() string { return "jj diff --stat" }
 
+// OperationCommands implements types.VCSIdentity and reports that jj never stops: a
+// rebase or merge completes in one operation, as OperationInProgress says.
+func (v jjVCS) OperationCommands() ([]types.OperationCommand, bool) { return nil, false }
+
+// FoldCommand implements types.VCSIdentity. The regenerated files land in @, and squash
+// moves them into rev and rebases what sits on it, wherever rev is.
+func (v jjVCS) FoldCommand(rev string, _ bool) (string, bool) {
+	return "jj squash --into " + rev, true
+}
+
 // ParentRef is the first parent of the working-copy commit. jj's working copy is
 // itself a commit, so the interesting comparison is against @-, not @.
 func (v jjVCS) ParentRef() string { return "@-" }

@@ -64,6 +64,16 @@ type VCSIdentity interface {
 	// argument. The spellings do not interchange: git reads its INDEX, hg and Sapling
 	// diff the working copy against its parent, and jj has no staging area at all.
 	ReviewCommand() string
+	// OperationCommands returns every command that continues, skips or aborts an
+	// operation this backend can stop in, so no caller keeps one backend's list. stops is
+	// false where operations never stop: jj records a conflict in the commit. Such a
+	// backend has no command to match, which differs from a match that failed.
+	OperationCommands() (cmds []OperationCommand, stops bool)
+	// FoldCommand returns the command that folds the working copy's changes into rev, an
+	// unpublished revision, keeping its message. tip says rev is the current revision.
+	// ok is false where no single command does it, as for hg below the tip. The caller
+	// then says so rather than offer another backend's spelling.
+	FoldCommand(rev string, tip bool) (cmd string, ok bool)
 }
 
 // WorkingCopyReporter reports the state of the checked-out working copy.
@@ -695,6 +705,25 @@ const (
 	OperationCherryPick = "cherry-pick"
 	OperationRevert     = "revert"
 )
+
+// The steps an OperationCommand takes.
+const (
+	OperationContinue = "continue"
+	OperationSkip     = "skip"
+	OperationAbort    = "abort"
+)
+
+// OperationCommand is one command line that moves a stopped operation on: it continues
+// Op, skips its current step, or aborts it.
+type OperationCommand struct {
+	// Op is the operation as OperationInProgress names it, so hg's histedit is
+	// OperationRebase.
+	Op string
+	// Step is OperationContinue, OperationSkip or OperationAbort.
+	Step string
+	// Argv is the command, program first: {"hg", "graft", "--continue"}.
+	Argv []string
+}
 
 // OperationReporter is the capability to name the history rewrite a checkout is stopped
 // in, whether or not it stopped on a conflict. Anything derived from the tree then

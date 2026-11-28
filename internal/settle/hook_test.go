@@ -3,21 +3,9 @@ package settle
 import (
 	"testing"
 
-	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 )
-
-// TestGeneratorProjectsCountsMovedOutputs: a project whose output the operation moved
-// regenerates too, since that output was made against a base the operation replaced.
-func TestGeneratorProjectsCountsMovedOutputs(t *testing.T) {
-	got := generatorProjects([]types.FileEntry{
-		{Path: "docs/a.md", Role: "source", SourceOf: []string{".", "docs"}},
-		{Path: "api/gen/x.go", Role: "output", OutputOf: []string{"api"}},
-		{Path: "README", Role: "unclaimed"},
-	})
-	assert.Equal(t, []string{".", "api", "docs"}, got)
-}
 
 // TestSettleInvocationsOneRunPerTarget: every project of a target shares one
 // `<target>:rw` run, whatever its depth, so the scheduler orders and parallelizes them;

@@ -53,6 +53,22 @@ func (v saplingVCS) Base() string { return "remote/main" }
 // has no index either.
 func (v saplingVCS) ReviewCommand() string { return "sl diff --stat" }
 
+// OperationCommands implements types.VCSIdentity. Sapling aborts a merge only with
+// `sl goto --clean .`, a whole-tree revert that discards every uncommitted edit, so no
+// merge command is listed.
+func (v saplingVCS) OperationCommands() ([]types.OperationCommand, bool) {
+	return hgOperationCommands("sl"), true
+}
+
+// FoldCommand implements types.VCSIdentity. `sl amend --to` folds into a commit below
+// the tip and restacks its descendants.
+func (v saplingVCS) FoldCommand(rev string, tip bool) (string, bool) {
+	if tip {
+		return "sl amend", true
+	}
+	return "sl amend --to " + rev, true
+}
+
 // ParentRef is the first parent of the working copy, in Sapling's Mercurial-inherited
 // revset syntax.
 func (v saplingVCS) ParentRef() string { return "p1(.)" }

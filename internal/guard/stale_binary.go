@@ -573,14 +573,19 @@ func onlyBaggageAssigns(assigns []*syntax.Assign) bool {
 	})
 }
 
-// vcsRecoveryLine reports a git line that continues, skips or aborts an interrupted
-// cherry-pick, merge, rebase or revert, picks more commits, or adds a worktree.
+// vcsRecoveryLine reports a line that is exactly a command the backend lists for moving
+// a stopped operation on. A git line that picks more commits or adds a worktree counts too.
 func vcsRecoveryLine(words []string) bool {
-	if len(words) < 3 || path.Base(words[0]) != "git" {
+	if len(words) < 3 {
 		return false
 	}
-	if len(words) == 3 && (words[2] == "--abort" || words[2] == "--continue" || words[2] == "--skip") {
-		return slices.Contains([]string{"cherry-pick", "merge", "rebase", "revert"}, words[1])
+	if len(words) == 3 {
+		if oc, ok := operationCommand(hint.Invocation{Name: words[0], Args: words[1:]}); ok && slices.Equal(oc.Argv[1:], words[1:]) {
+			return true
+		}
+	}
+	if path.Base(words[0]) != "git" {
+		return false
 	}
 	switch words[1] {
 	case "cherry-pick":

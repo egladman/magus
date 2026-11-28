@@ -79,6 +79,19 @@ func (s *UnloadableCommitSuite) TestARevertContinueWaitsForTheLoad() {
 	shortDeny(s.T(), s.cacheDir, s.judge("git revert --continue"), denyRulePolicyUnloaded, commitSay("git revert --continue"))
 }
 
+func (s *UnloadableCommitSuite) TestAnHgRebaseContinueWaitsForTheLoad() {
+	shortDeny(s.T(), s.cacheDir, s.judge("hg rebase --continue"), denyRulePolicyUnloaded, commitSay("hg rebase --continue"))
+}
+
+func (s *UnloadableCommitSuite) TestASaplingGraftContinueWaitsForTheLoad() {
+	shortDeny(s.T(), s.cacheDir, s.judge("sl graft --continue"), denyRulePolicyUnloaded, commitSay("sl graft --continue"))
+}
+
+func (s *UnloadableCommitSuite) TestAnHgHisteditAbortPasses() {
+	v := s.judge("hg histedit --abort")
+	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
+}
+
 func (s *UnloadableCommitSuite) TestAnAbortPasses() {
 	v := s.judge("git cherry-pick --abort")
 	s.NotEqual(verdict.Deny, v.Decision, v.Reason)
