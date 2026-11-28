@@ -51,9 +51,6 @@ var hookTemplates = []string{
 	// Samples free disk space and may start a reclaim chunk; it judges no call, so it too
 	// declares no coverage.
 	"magus-reclaim-disk.buzz",
-	// Converts a Claude Code notification into a magus event; it judges no call, so it too
-	// declares no coverage.
-	"magus-notify-claude-code.buzz",
 	"codex-hooks.json",
 	"cursor-hook.buzz",
 	// The session-load adapters are shipped artifacts too: version-stamped, embedded
@@ -94,6 +91,8 @@ var templateDirScaffolding = map[string]bool{
 	// copies into a host; see the note at its top for the split with the file
 	// above.
 	"opencode-plugin.live.test.ts": true,
+	// A script events are piped through, not a guard template: no version, no coverage.
+	"magus-notify-claude-code.buzz": true,
 }
 
 // TestEveryShippedTemplateIsRegistered closes the gate the other parity tests
