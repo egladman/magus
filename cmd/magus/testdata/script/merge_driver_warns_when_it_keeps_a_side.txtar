@@ -28,7 +28,7 @@ cmp gen/flags.txt main.flags.txt
 exec magus vcs resolve
 cmp gen/flags.txt src.other.txt
 exec git status --porcelain --untracked-files=no
-stdout '^M  gen/flags.txt$'
+stdout '^ M gen/flags.txt$'
 
 -- magusfile.buzz --
 import "magus";
