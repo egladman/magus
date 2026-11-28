@@ -62,7 +62,7 @@ gets you both binaries at the pinned versions.
 After placing a source-built `./magus`, prepare the checkout with:
 
 ```sh
-./magus buzz hack/dev/bootstrap-checkout.buzz -- --here
+./magus buzz hack/dev/bootstrap-checkout.buzz
 ```
 
 Bootstrap installs every harness declared in `magusfile.buzz`, including its

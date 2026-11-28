@@ -1931,6 +1931,6 @@ func TestBuildRemedyNamesTheDeclaredCheckoutHook(t *testing.T) {
 	declared := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(declared, config.Filename), []byte("checkout:\n  bootstrap: tools/boot.buzz\n"), 0o644))
 
-	assert.Contains(t, buildRemedy(declared), "`./magus buzz tools/boot.buzz -- --here`")
+	assert.Contains(t, buildRemedy(declared), "`./magus buzz tools/boot.buzz`")
 	assert.Contains(t, buildRemedy(t.TempDir()), "declares no checkout.bootstrap hook")
 }

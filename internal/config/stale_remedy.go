@@ -82,7 +82,7 @@ func ReadyCheckoutCommand(hook string) string {
 	if hook == "" {
 		return "magus agent harness install"
 	}
-	return shellLine([]string{"./magus", "buzz", hook, "--", "--here", "--verify-ready"})
+	return shellLine([]string{"./magus", "buzz", hook})
 }
 
 func requiredVersion(data []byte) string {

@@ -832,7 +832,7 @@ func storeAt(st migrate.Store, header migrate.Entry, found int) string {
 // declares, or a plain instruction when it declares none.
 func buildRemedy(root string) string {
 	if hook := config.CheckoutHookAt(root); hook != "" {
-		return fmt.Sprintf("build magus with the workspace's checkout.bootstrap hook, `./magus buzz %s -- --here`", hook)
+		return fmt.Sprintf("build magus with the workspace's checkout.bootstrap hook, `./magus buzz %s`", hook)
 	}
 	return "build magus from a clean checkout of this workspace, which declares no checkout.bootstrap hook"
 }

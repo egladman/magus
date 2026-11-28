@@ -615,7 +615,7 @@ func (s *staleConfigSuite) TestAStateChangeIsRefusedAsUnjudged() {
 	v := s.judge("touch notes.txt")
 	s.Equal(verdict.Deny, v.Decision)
 	s.Contains(v.Reason, "magus guard could not judge this call, so it is refused")
-	s.Contains(v.Reason, "hack/dev/bootstrap-checkout.buzz -- --here --verify-ready")
+	s.Contains(v.Reason, "./magus buzz hack/dev/bootstrap-checkout.buzz")
 }
 
 func (s *staleConfigSuite) TestAReadIsRefusedToo() {

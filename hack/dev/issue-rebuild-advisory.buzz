@@ -42,10 +42,10 @@ export fun advisoryText(short: str, full: str, reason: str) > str {
     lines.append("Bring your checkout onto {short} ({full}) and rebuild ./magus." + (if (why == "") "" else " Reason: {why}"));
     lines.append("Check yourself: `./magus version -o json` reports `commit`. You are current when that commit contains {full}.");
     lines.append("If you are not current, a clean checkout with no commits of its own runs:");
-    lines.append("./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --onto {full}");
+    lines.append("./magus buzz hack/dev/bootstrap-checkout.buzz -- --onto {full}");
     lines.append("A branch with its own commits merges the base, naming its own branch, then rebuilds:");
     lines.append("./magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <its branch>");
-    lines.append("./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready");
+    lines.append("./magus buzz hack/dev/bootstrap-verification.buzz");
     lines.append("A leased worker builds nothing: ask your main session to place the binary.");
     return lines.join("\n");
 }
@@ -136,9 +136,9 @@ test "an absent reason leaves no reason clause" {
 
 test "each command stands alone on its line" {
     final lines = advisoryText(SHORT, full: FULL, reason: "").split("\n");
-    assert\equal(lines.indexOf("./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --onto {FULL}") != null, want: true, message: "clean checkout");
+    assert\equal(lines.indexOf("./magus buzz hack/dev/bootstrap-checkout.buzz -- --onto {FULL}") != null, want: true, message: "clean checkout");
     assert\equal(lines.indexOf("./magus buzz hack/dev/merge-base-into-branches.buzz -- --branches <its branch>") != null, want: true, message: "merge");
-    assert\equal(lines.indexOf("./magus buzz hack/dev/bootstrap-checkout.buzz -- --here --verify-ready") != null, want: true, message: "verify-ready");
+    assert\equal(lines.indexOf("./magus buzz hack/dev/bootstrap-verification.buzz") != null, want: true, message: "bootstrap-verification");
 }
 
 test "a leased worker is told to ask its main session" {

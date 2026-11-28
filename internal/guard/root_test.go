@@ -973,28 +973,28 @@ func (s *RecoversOwnCheckoutSuite) SetupTest() {
 
 func (s *RecoversOwnCheckoutSuite) TestTheDeclaredHookWithRecoverIsRootWork() {
 	declareCheckoutHook(s.T(), s.root)
-	s.True(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here --recover", s.root))
+	s.True(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --recover", s.root))
 }
 
 func (s *RecoversOwnCheckoutSuite) TestARenamedHookIsReadFromMagusYAML() {
 	body := "checkout:\n  bootstrap: tools/ready.buzz\n"
 	s.Require().NoError(os.WriteFile(filepath.Join(s.root, "magus.yaml"), []byte(body), 0o644))
-	s.True(recoversOwnCheckout("./magus buzz tools/ready.buzz -- --here --recover", s.root))
-	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here --recover", s.root))
+	s.True(recoversOwnCheckout("./magus buzz tools/ready.buzz -- --recover", s.root))
+	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --recover", s.root))
 }
 
 func (s *RecoversOwnCheckoutSuite) TestNoDeclaredHookRecoversNothing() {
-	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here --recover", s.root))
+	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --recover", s.root))
 }
 
 func (s *RecoversOwnCheckoutSuite) TestTheHookWithoutRecoverIsNotRecovery() {
 	declareCheckoutHook(s.T(), s.root)
-	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here", s.root))
+	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --force", s.root))
 }
 
 func (s *RecoversOwnCheckoutSuite) TestASecondCommandIsNotRecovery() {
 	declareCheckoutHook(s.T(), s.root)
-	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --here --recover && git push", s.root))
+	s.False(recoversOwnCheckout("./magus buzz "+testCheckoutHook+" -- --recover && git push", s.root))
 }
 
 // RefreshesOwnCheckoutSuite pins which move of the root's own checkout to its base branch

@@ -1,0 +1,25 @@
+// Readies a checkout to verify. It builds ./magus only when it is not at HEAD.
+// Then it stops pool parents, prunes stale skill installs, installs
+// dependencies, and builds the graph, symbol digest and proofread. It runs in
+// the current checkout or -C <dir>.
+namespace readycheckout;
+
+import "flags";
+import "std";
+import "vcs";
+import "hack/dev/bootstrap-checkout" as bootstrap;
+
+final USAGE = "usage: magus buzz hack/dev/bootstrap-verification.buzz -- [-C <dir>] [--restart]";
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help", "--restart"], valued: ["-C"]);
+    if (parsed.values["--help"] != null) {
+        std\print(USAGE);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "bootstrap-verification: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final dir = parsed.values["-C"] ?? vcs\root();
+    _ = bootstrap\readyCheckout(bootstrap\liveHost(), dir: dir, restart: parsed.values["--restart"] != null);
+}
