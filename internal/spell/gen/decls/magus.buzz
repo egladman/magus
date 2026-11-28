@@ -771,6 +771,7 @@ export object Job {
     dependsOn: [str] = [],
     integrates: [str] = [],
     breaks: [str] = [],
+    creates: [str] = [],
     modelTier: magus\agent\JobModelTier? = null,
     briefFormat: BriefFormat = BriefFormat.none,
     delivery: str = "",
@@ -886,6 +887,10 @@ export object Workspace {
 
     fun forkFacts() > JobForkFacts !> any {
         return magus__Workspace__forkFacts(this);
+    }
+
+    fun newDirs(writes: [str]) > NewDirs !> any {
+        return magus__Workspace__newDirs(this, writes: writes);
     }
 
     fun unmerged() > JobUnmergedReport !> any {
@@ -1077,6 +1082,16 @@ export object JobForkFacts {
     lastTestRef: str = "",
     lastTestRevision: str = "",
     testUnknown: str = "",
+}
+
+export object NewDir {
+    dir: str = "",
+    neighbors: [str] = [],
+}
+
+export object NewDirs {
+    dirs: [NewDir] = [],
+    unknown: str = "",
 }
 
 export object UnverifiedFile {
@@ -2762,6 +2777,7 @@ extern fun magus__Workspace__jobs(recv: Workspace) > JobList !> any;
 extern fun magus__Workspace__putJob(recv: Workspace, id: str, opts: {str: any} = {<str: any>}) > Job !> any;
 extern fun magus__Workspace__clearJobs(recv: Workspace) > int !> any;
 extern fun magus__Workspace__forkFacts(recv: Workspace) > JobForkFacts !> any;
+extern fun magus__Workspace__newDirs(recv: Workspace, writes: [str]) > NewDirs !> any;
 extern fun magus__Workspace__unmerged(recv: Workspace) > JobUnmergedReport !> any;
 extern fun magus__Workspace__unverified(recv: Workspace, revision: str) > UnverifiedReport !> any;
 extern fun magus__Workspace__tierOutcomes(recv: Workspace) > ModelTiers !> any;
