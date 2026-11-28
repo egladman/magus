@@ -12,6 +12,7 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/ward"
 )
@@ -168,11 +169,11 @@ func denyContractSkew(ctx context.Context, deps Dependencies, at location, line 
 	if readOnlyLine(line, d) || recoveryLine(line, d, deps.lease, deps.lease == "", at) || replacesStaleMagus(line, at) {
 		return ""
 	}
+	fix, why := skewRemedy(root)
 	if err != nil {
 		return denial{
-			Say: fmt.Sprintf("magus workspace: cannot read the contract %s carries (%v); %s.",
-				root, err, ward.RelinkAndStampAt(root)),
-			Why: withPolicyNote(relinkWhy, runPolicyNote(line, at)),
+			Say: fmt.Sprintf("magus workspace: cannot read the contract %s carries (%v); %s.", root, err, fix),
+			Why: withPolicyNote(why, runPolicyNote(line, at)),
 		}.full()
 	}
 	if currentTreeAtOtherAuthority(root, skew) {
@@ -183,9 +184,19 @@ func denyContractSkew(ctx context.Context, deps Dependencies, at location, line 
 	}
 	return denial{
 		Say: fmt.Sprintf("magus workspace: %s (%s) embeds contract %.12s, and %s carries %.12s; %s.",
-			deps.Binary, cmp.Or(deps.BinaryVersion, "an unknown version"), skew.Binary, skew.TreeName(), skew.Tree, ward.RelinkAndStampAt(root)),
-		Why: withPolicyNote(relinkWhy, runPolicyNote(line, at)),
+			deps.Binary, cmp.Or(deps.BinaryVersion, "an unknown version"), skew.Binary, skew.TreeName(), skew.Tree, fix),
+		Why: withPolicyNote(why, runPolicyNote(line, at)),
 	}.full()
+}
+
+// skewRemedy is the fix for a contract skew at root and its reason. A checkout
+// of magus rebuilds and stamps in one line, which the root rule passes; any
+// other workspace keeps the two-line relink then stamp.
+func skewRemedy(root string) (fix, why string) {
+	if ownSourceRoot(root) {
+		return fmt.Sprintf("rebuild and stamp ./magus with `%s`, alone on its line", config.SourceCommand(root, "", "", true)), rebuildWhy
+	}
+	return ward.RelinkAndStampAt(root), relinkWhy
 }
 
 // endsRow reports a lone `magus job exit <lease>` or `magus job wait <lease>`,
