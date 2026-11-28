@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -197,4 +198,73 @@ func (s *RecorderSuite) TestAnEndErrorWinsAndKeepsTheValue() {
 	s.Equal(int64(7), v.AsInt())
 	s.ErrorIs(err, callErr)
 	s.ErrorContains(err, "is closed")
+}
+
+// recordedCalls is the run size the ADR's cost figures are measured over.
+const recordedCalls = 10_000
+
+// BenchmarkRecordedRun runs recordedCalls native calls through a Recorder, the path a
+// --record run takes, with a synced begin line per call.
+func BenchmarkRecordedRun(b *testing.B) {
+	ctx := context.Background()
+	args := []vm.Value{vm.IntValue(1), vm.StringValue("arg")}
+	native := func(context.Context, []vm.Value) (vm.Value, error) { return vm.StringValue("result"), nil }
+	var size int64
+	b.ReportAllocs()
+	for i := range b.N {
+		rec, err := OpenLog(b.TempDir(), fmt.Sprintf("out%d", i), Header{Script: "bench.buzz"})
+		if err != nil {
+			b.Fatal(err)
+		}
+		r := NewRecorder(rec)
+		for range recordedCalls {
+			if _, err := r.InterceptCall(ctx, "probe.ping", args, native); err != nil {
+				b.Fatal(err)
+			}
+		}
+		size = logSize(b, rec)
+		if err := rec.Close(); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N*recordedCalls), "ns/call")
+	b.ReportMetric(float64(size)/recordedCalls, "bytes/call")
+}
+
+// BenchmarkRecordedLines writes the begin and end lines of recordedCalls calls, with
+// and without the begin line's sync. It isolates what the sync costs; the shipped
+// path always syncs.
+func BenchmarkRecordedLines(b *testing.B) {
+	for _, sync := range []bool{true, false} {
+		b.Run(fmt.Sprintf("sync=%t", sync), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := range b.N {
+				rec, err := OpenLog(b.TempDir(), fmt.Sprintf("out%d", i), Header{Script: "bench.buzz"})
+				if err != nil {
+					b.Fatal(err)
+				}
+				for seq := range recordedCalls {
+					e := Call{Seq: seq, Parent: -1, Name: "probe.ping", ArgsDigest: "d", End: callOpen}
+					ended := e
+					ended.End, ended.Result = callReturned, `"result"`
+					if err := errors.Join(rec.append(e, sync), rec.append(ended, false)); err != nil {
+						b.Fatal(err)
+					}
+				}
+				if err := rec.Close(); err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N*recordedCalls), "ns/call")
+		})
+	}
+}
+
+func logSize(b *testing.B, rec *Log) int64 {
+	b.Helper()
+	info, err := os.Stat(rec.path)
+	if err != nil {
+		b.Fatal(err)
+	}
+	return info.Size()
 }
