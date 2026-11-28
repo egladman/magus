@@ -96,7 +96,7 @@ every run and there is no stored chunk to pin to.
 **Cost.** The prototype's unoptimized recorder (SHA-256 and JSON per call) added 0.6 to
 12.6 microseconds per call over five runs of 10,000 calls on a loaded machine, and wrote
 161.7 bytes per call (**ran**, 2026-11-27). The built recorder is measured under
-Consequences, and its per-call sync costs milliseconds, not microseconds. The VM's
+Consequences: a sync costs milliseconds, so only a call that may not repeat pays one. The VM's
 builtin methods (`list.append`, `str.len`) are built by `newDirect` without a heap value
 and never reach a module map; in the prototype's script with 20 direct calls, 13 were
 module natives and 7 were builtins, and only the natives belong in a record.
@@ -143,7 +143,7 @@ orchestrator session, a launch agent they own, or a pod's restart policy.
 | An entry holds the call's name, its parent call, a digest of its arguments, and its result as JSON that keeps int, float, map and object apart. A result that holds a function, a foreign pointer or a native payload is recorded as `unencodable` with the reason and where. | `internal/interp/replay/codec.go`; `TestCodecRoundTrips`, `TestStdJSONDoesNotKeepAFloatApart` | done |
 | Every native module is classed `answer` or `live` in a table in `internal/interp/replay/class.go`, and a test walks the generated registry and gopherbuzz's std and fails on a module with no class. `live` is a module whose results name state in this process: a handle table, an open file, a socket, a listener. | `TestEveryModuleHasAReplayClass`, `TestAModuleHoldingProcessStateIsLive`, `TestAModuleOfDataIsAnAnswer` in `internal/interp/replay/class_test.go` | done |
 | A native may be run again after a run died inside it only if it is on the reads-only list `repeatable` in `class.go`. An unlisted native is not repeatable, and the resume refuses at it. | `TestOnlyReadsAreRepeatable` | done |
-| A begin line is synced to disk before its call runs. An end line is not synced; the next begin or `Close` syncs it, and a reboot before then leaves the call open. | `Log.begin` and `Log.append` in `internal/interp/replay/log.go` call `Sync`; no test observes the sync, and `BenchmarkRecordedLines` measures its cost | done |
+| The begin line of a native that may not repeat is synced to disk before its call runs. A repeatable native's begin line and every end line are not synced; the next synced begin, `Finish` or `Close` flushes them. A reboot before then cuts the log's tail: a lost repeatable begin replays live, a lost end leaves the call open. | `TestOnlyANonRepeatableBeginIsSyncedBeforeItsNativeRuns` in `RecorderSuite`; `TestALogCutAtAnyByteResumesOrRefusesOutcomeUnknown` in `PlayerSuite`; `BenchmarkRecordedRun` measures the cost by mix | done |
 | One process writes a log at a time. A second `--record` run of the same ref while the first is alive is refused, naming the holder's pid. | `TestStoreRefusesASecondWriter` | done |
 | `magus buzz --record <script>`, run again with the same arguments, finds the open log under its ref and replays it. No flag asks for this. A call with a recorded end and no nested calls is answered from the log. A call with nested calls runs again and its nested calls are answered. Past the log's end the run is live and keeps appending. | `replay.Player`; `TestAnEndedCallIsAnsweredWithoutRunning`, `TestACallWithNestedCallsRunsAgainAndItsNestedCallsAreAnswered`, `TestPastTheRecordTheRunIsLiveAndAppends`, `TestARerunResumesAnInterruptedRecordedRun` | done |
 | A run that reaches its end on its own writes a footer line. The next run of the same command finds a finished log and starts a new attempt. A run its context cut off writes none. | `Log.Finish`, `Finished`; `TestAFinishedRecordIsMarkedAndRefusesAppends` | done |
@@ -151,12 +151,12 @@ orchestrator session, a launch agent they own, or a pod's restart policy.
 | `--restart` discards the open log and runs from the top. It needs `--record` and is refused without it. Every refusal ends with the same remedy line. | `TestRestartDiscardsTheRecord`, `TestRestartNeedsRecord`, `TestARestartWithoutRecordIsRefused`; `remedy` in `player.go` | done |
 | A `--test` run keeps no log. An unrecorded run opens none and pays nothing. | `TestATestRunKeepsNoCalls`, `TestAnUnrecordedRunOpensNoLog` in `internal/interp/script_run_test.go` | done |
 | A failed recorded run's `ref` line says which call it died in. | `TestAFailedRunNamesTheCallItDiedIn` | done |
-| `magus query output <ref>` shows the calls of the run. | not built: `query output` renders a ref in `queryOutputCommand` in `cmd/magus/query.go`, which reads the output store and knows nothing of `replay/<ref>/`; the change goes there | planned |
+| `magus query output <ref>` for a recorded buzz run logs, as a notice after the run's bytes (so stdout stays what the run wrote, and the log settings govern it), the last 20 of its calls: seq, name and how each ended, an open call marked as the one the run stopped inside, and the path of `calls.jsonl`, which holds all of them. A `buzz -t` run keeps no log and shows none. Text output only; `-o json` prints the stored record unchanged. | `writeRecordedCalls` and `recordsCalls` in `cmd/magus/query.go`; `TestQueryOutputShowsAStoppedRunsCallsWithTheOpenOneMarked`, `TestQueryOutputShowsOnlyTheLastCallsOfALongRun`, `TestOnlyARecordedBuzzRunKeepsCalls` in `BuzzRecordSuite` | done |
 | A script reads a run's log as typed Buzz values. | none built; see Open questions | planned |
-| `stoppedRuns(dir)` in the replay package, unexported until a caller outside it exists, lists each record whose run did not finish and whose writer is dead (its one-writer lock can be taken), with its ref, script, arguments, innermost open call and the command that resumes it, `magus buzz --record <script> -- <args>`, shell-quoted. A record a live process writes is left out; an unreadable one is reported beside the rest. | `internal/interp/replay/interrupted.go`; `TestARunWhoseWriterIsGoneIsListedWithItsOpenCallAndResume`, `TestARunALiveProcessWritesIsNotListed`, `TestAFinishedRunIsNotListed`, `TestAnUnreadableRecordIsReportedBesideTheRest` in `StoppedRunsSuite` | done |
-| A session's start prints that list, and starts nothing. | not built: the rehydrate hook (`docs/guides/integrations/agents/magus-rehydrate.buzz`) imports no magus module, to keep the workspace closed, and prints what `magus session --brief` prints. The list reaches it only through `cmd/magus/session.go`, which would export `stoppedRuns` and call it on `<cache>/replay`; no binding inside this record's files reaches it | planned |
+| `replay.StoppedRuns(dir)` lists each record whose run did not finish and whose writer is dead (its one-writer lock can be taken), with its ref, script, arguments, innermost open call, the command that resumes it, `magus buzz --record <script> -- <args>`, and the one that starts it over, the same with `--restart`, shell-quoted. A record a live process writes is left out; an unreadable one is reported beside the rest. | `internal/interp/replay/interrupted.go`; `TestARunWhoseWriterIsGoneIsListedWithItsOpenCallAndCommands`, `TestARunALiveProcessWritesIsNotListed`, `TestAFinishedRunIsNotListed`, `TestAnUnreadableRecordIsReportedBesideTheRest` in `StoppedRunsSuite` | done |
+| A session's start prints that list, and starts nothing. `magus session --brief`, which the rehydrate hook (`docs/guides/integrations/agents/magus-rehydrate.buzz`) prints, adds each stopped run with its resume and restart commands. No stopped run prints nothing. Text output only; `-o json` carries the brief's payload unchanged. | `writeStoppedRuns` in `cmd/magus/session.go`; `TestAStoppedRunIsListedWithItsResumeAndRestart`, `TestNoStoppedRunPrintsNothing` in `BriefStoppedRunsSuite` | done |
 | The flush per call and the seam's nil check are benchmarked, recorded and not asserted; Consequences holds the numbers. The seam is cheap and the flush is not. | `BenchmarkCallInterceptorNone`, `BenchmarkCallInterceptorPassThrough` in `libs/gopherbuzz/benchmarks/interceptor_bench_test.go`; `BenchmarkRecordedRun`, `BenchmarkRecordedLines` in `internal/interp/replay/recorder_test.go` | done |
-| magus starts no run by itself: no daemon, no launch agent, no boot item. | nothing enforces it. Today only `cmd/magus` imports `internal/interp/replay` (`magus explain dir:internal/interp/replay`), and a log opens only under `--record`. An import rule that refuses any other importer of the package, with a test that no code path writes a launchd or systemd unit, would prove it | planned |
+| magus starts no run by itself: no daemon, no launch agent, no boot item. | nothing enforces it. Today only `cmd/magus` imports `internal/interp/replay` (`magus explain dir:internal/interp/replay`), a log opens only under `--record`, and the brief only prints the commands. A test inside the replay package could prove only that the package spawns nothing, not magus as a whole. An import rule that refuses any other importer of the package, with a test that no code path writes a launchd or systemd unit, would prove it | planned |
 
 What magus refuses here:
 
@@ -274,17 +274,37 @@ each a whole entry. A run that makes ten thousand calls writes 3.5 MB
 (`BenchmarkRecordedRun`, two arguments and a string result, Apple M5, macOS,
 2026-11-27).
 
-Recording costs seconds per ten thousand calls. `BenchmarkRecordedRun` took 39.5 to
-47.5 seconds for 10,000 calls through the `Recorder`, 3.9 to 4.8 milliseconds per call,
-over three runs on an Apple M5 under macOS on 2026-11-27. `BenchmarkRecordedLines`
-writes the same two lines per call: 4.7 to 5.4 milliseconds a call with the begin
-line synced, and 13.9 to 15.5 microseconds without (output ref `outd6ee6e1d7cb2`).
-Nearly all of the cost is the begin line's `Sync`: on macOS
-Go's `File.Sync` is `F_FULLFSYNC`, a flush through the drive's cache. A script that
-makes ten thousand native calls spends more time recording than running. Whether to
-keep a sync per call is an open question below; the behavior is unchanged here.
-Run them with `./magus run go::go-test . --no-default-charms -- ./internal/interp/replay
--run '^$' -bench Recorded -benchtime 3x`.
+With a sync on every begin line, recording cost seconds per ten thousand calls:
+`BenchmarkRecordedLines` writes two lines per call and took 4.7 to 5.4 milliseconds a
+call with the begin line synced and 13.9 to 15.5 microseconds without (output ref
+`outd6ee6e1d7cb2`). Nearly all of it is the `Sync`: on macOS Go's `File.Sync` is
+`F_FULLFSYNC`, a flush through the drive's cache.
+
+So only a call that may not repeat syncs its begin line (Eli, 2026-11-27). A repeatable
+native's begin line and every end line are written unsynced, and the next synced begin,
+`Finish` or `Close` flushes them. This loses nothing a resume relies on. Every line is
+an ordered append by the one writer to one file, and a sync flushes every line before
+it, so a reboot can only cut the log's tail; it never keeps a later line and drops an
+earlier one. A cut tail either drops a repeatable call's begin, which the resume runs
+live, as a read may be run again, or drops a call's end, which leaves it open: a
+repeatable call runs again, and one that may not repeat is refused `outcome-unknown`.
+`TestALogCutAtAnyByteResumesOrRefusesOutcomeUnknown` cuts a mixed log at every byte
+and resumes; `TestOnlyANonRepeatableBeginIsSyncedBeforeItsNativeRuns` observes which
+begins are synced.
+
+`BenchmarkRecordedRun`, 10,000 calls through the `Recorder` per run, three runs each on
+an Apple M5 under macOS on 2026-11-27 (output ref `out51158aa87b12`):
+
+| calls | per 10,000 calls | per call |
+| --- | --- | --- |
+| every call a read (`fs.readFile`) | 0.32 to 0.33 s | 32 to 33 µs |
+| one `proc.exec` in five, the rest reads | 8.6 to 9.3 s | 0.86 to 0.93 ms |
+| every call a `proc.exec` | 40.7 to 43.8 s | 4.1 to 4.4 ms |
+
+The cost falls with the share of calls that may not repeat, as expected. A script of
+execs still pays a disk flush per exec. Run them with `./magus run go::go-test .
+--no-default-charms -- ./internal/interp/replay -run '^$' -bench Recorded -benchtime 1x
+-count 3`.
 
 A failed recorded run says which call it died in on its `ref` line, and what ran before
 it is in `calls.jsonl`, whether or not anyone resumes it.
@@ -330,14 +350,13 @@ made, which are the only calls a run makes before then.
 - Whether a deployment to Kubernetes is wanted. If it is, the shared store, the
   cross-machine claim and the rule for effects on local disk are one further ADR.
 - Whether the reads-only list is right. It is a first cut in `class.go`, written by
-  hand over the modules and not counted against the generated methods.
-- Whether to keep a sync per call. It is measured now: about 4 milliseconds a call on
-  an Apple M5 under macOS, 40 to 48 seconds per ten thousand calls, against about 15
-microseconds a call unsynced (Consequences). It
-  is there because the failure is a reboot. Cheaper routes exist and none is built: a
-  sync only before a native that is not on the reads-only list, a `fdatasync`-class
-  flush in place of `F_FULLFSYNC`, or a sync every N calls with a reboot reopening the
-  last N.
+  hand over the modules and not counted against the generated methods. It now also
+  decides which begin lines are synced, so a native wrongly listed as repeatable loses
+  its durable begin line as well as its refusal.
+- Whether a script of execs needs a cheaper flush. Only calls that may not repeat sync
+  now (Consequences); each still costs about 4 milliseconds on an Apple M5. An
+  `fdatasync`-class flush in place of `F_FULLFSYNC` is the next route, and it is not
+  built.
 - Where a large result goes. The entry holds the result inline; no blob store keyed by
   digest was found (job `dx-stores`), and an `fs\readFile` of a large file puts the file
   in the log.
