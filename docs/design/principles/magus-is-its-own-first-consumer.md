@@ -48,9 +48,12 @@ same case as any other capability.
 
 ## Enforced by
 
-- Not yet by a program, which is a debt. A lint in `hack/lint/` that counts Go
-  literals naming this repository, with today's sites as a baseline in the root
-  `analyzers.yaml` that may only fall, is the planned enforcement point.
+- `hack/lint/core-names-nothing-of-this-repository.buzz` counts the product Go
+  lines that name this repository's paths, targets, tools or script flags. Each
+  file is held to its count in the root `analyzers.yaml` baseline, which may only
+  fall, so no new line lands and each one removed stays removed. It counts names,
+  so a branch on where magus runs that names nothing, like `ownSourceRoot`, is
+  still caught only in review.
 - `ConsumerWorkspaceSuite` in `internal/guard/stale_binary_test.go` runs the
   stale-binary remedies in a workspace that is not magus and fails if one names
   `./cmd/magus`, `go-build`, `GOEXPERIMENT` or `hack/`.
