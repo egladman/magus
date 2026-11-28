@@ -304,3 +304,37 @@ func (s *PlayerSuite) TestARunThatDoesLessIsRefused() {
 	s.ErrorIs(err, RefusalDiverged)
 	s.ErrorContains(err, "ended with 2 recorded calls not made")
 }
+
+func (s *PlayerSuite) importsPlayer() *Player {
+	h := Header{Script: "run.buzz", Imports: map[string]string{"/w/a.buzz": "aaaa", "/w/b.buzz": "bbbb"}}
+	return NewPlayer(h, nil, classes, nil, nil)
+}
+
+func (s *PlayerSuite) TestTheSameImportsResume() {
+	s.NoError(s.importsPlayer().Imports(map[string]string{"/w/a.buzz": "aaaa", "/w/b.buzz": "bbbb"}))
+}
+
+func (s *PlayerSuite) TestAChangedImportIsRefusedNamingTheFile() {
+	p := s.importsPlayer()
+	err := p.Imports(map[string]string{"/w/a.buzz": "aaaa", "/w/b.buzz": "cccc"})
+	s.ErrorIs(err, RefusalImportChanged)
+	s.EqualError(err, "resume refused: import-changed: /w/b.buzz changed: recorded sha256 bbbb, now cccc: "+remedy)
+	s.Equal(err, p.Err(), "the refusal stops the run")
+}
+
+func (s *PlayerSuite) TestAnAddedOrDroppedImportIsRefused() {
+	err := s.importsPlayer().Imports(map[string]string{"/w/a.buzz": "aaaa", "/w/b.buzz": "bbbb", "/w/c.buzz": "cccc"})
+	s.ErrorIs(err, RefusalImportChanged)
+	s.ErrorContains(err, "/w/c.buzz is imported now and was not")
+	err = s.importsPlayer().Imports(map[string]string{"/w/b.buzz": "bbbb"})
+	s.ErrorContains(err, "/w/a.buzz was imported when the run was recorded and is not now")
+}
+
+func (s *PlayerSuite) TestARecordWithoutImportsIsRefused() {
+	err := NewPlayer(Header{Script: "run.buzz"}, nil, classes, nil, nil).Imports(map[string]string{})
+	s.ErrorIs(err, RefusalImportChanged, "an empty map is not trusted for a missing line")
+	s.ErrorContains(err, "the record holds no import digests: the run that wrote it died before its entry compiled")
+	unread := Header{Script: "run.buzz", ImportsUnread: "the run ended before its entry compiled"}
+	err = NewPlayer(unread, nil, classes, nil, nil).Imports(map[string]string{})
+	s.ErrorContains(err, "no import digests: the run ended before its entry compiled")
+}

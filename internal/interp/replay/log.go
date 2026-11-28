@@ -30,6 +30,8 @@ type Log struct {
 	mu   sync.Mutex
 	f    *os.File
 	open map[int]Call
+	// imports is whether the record holds its imports line or the line saying why not.
+	imports bool
 }
 
 // OpenLog opens the record of ref under dir for appending, writing h first when the
@@ -128,8 +130,9 @@ func openLog(path string, h Header) (*Log, error) {
 			return nil, fmt.Errorf("replay: %s is finished: discard it to record again", path)
 		}
 		if !sameHeader(had, h) {
-			return nil, fmt.Errorf("replay: %s was recorded for %s %v, not %s %v, or with other imports", path, had.Script, had.Args, h.Script, h.Args)
+			return nil, fmt.Errorf("replay: %s was recorded for %s %v, not %s %v", path, had.Script, had.Args, h.Script, h.Args)
 		}
+		r.imports = had.Imports != nil || had.ImportsUnread != ""
 		for _, c := range calls {
 			if c.End == callOpen {
 				r.open[c.Seq] = c
@@ -149,7 +152,7 @@ func openLog(path string, h Header) (*Log, error) {
 }
 
 func sameHeader(a, b Header) bool {
-	return a.Format == b.Format && a.Script == b.Script && slices.Equal(a.Args, b.Args) && maps.Equal(a.Imports, b.Imports)
+	return a.Format == b.Format && a.Script == b.Script && slices.Equal(a.Args, b.Args)
 }
 
 // begin appends e's begin line and syncs it to disk before returning, so a call that
@@ -203,7 +206,7 @@ func (r *Log) Close() error {
 	if r.f == nil {
 		return fmt.Errorf("replay: %s is already closed", r.path)
 	}
-	err := errors.Join(r.f.Sync(), r.f.Close(), r.lock.Unlock())
+	err := errors.Join(r.noteUnreadLocked(), r.f.Sync(), r.f.Close(), r.lock.Unlock())
 	r.f = nil
 	if err != nil {
 		return fmt.Errorf("replay: close %s: %w", r.path, err)
@@ -281,6 +284,17 @@ func parse(path string, raw []byte) (Header, []Call, bool, error) {
 			finished = *f.Finished
 			continue
 		}
+		var imp struct {
+			Imports map[string]string `json:"imports"`
+			Unread  *string           `json:"imports_unread"`
+		}
+		if err := codec.Unmarshal(line, &imp); err == nil && (imp.Imports != nil || imp.Unread != nil) {
+			h.Imports = imp.Imports
+			if imp.Unread != nil {
+				h.ImportsUnread = *imp.Unread
+			}
+			continue
+		}
 		var c Call
 		if err := codec.Unmarshal(line, &c); err != nil {
 			return h, nil, false, &codec.LineError{Path: path, Line: n, Err: err}
@@ -301,8 +315,42 @@ func parse(path string, raw []byte) (Header, []Call, bool, error) {
 func (r *Log) Finish() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if err := r.noteUnreadLocked(); err != nil {
+		return err
+	}
 	t := true
 	return r.append(footerLine{Finished: &t}, true)
+}
+
+// noteImports appends the run's import digests. The next begin or Close syncs the
+// line. A record holds one imports line, so a second is an error.
+func (r *Log) noteImports(digests map[string]string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.imports {
+		return fmt.Errorf("replay: %s already holds its imports", r.path)
+	}
+	if digests == nil {
+		digests = map[string]string{}
+	}
+	if err := r.append(importsLine{Imports: digests}, false); err != nil {
+		return err
+	}
+	r.imports = true
+	return nil
+}
+
+// noteUnreadLocked says in the record that its imports never arrived, so a rerun
+// refuses instead of reading the absence as no imports.
+func (r *Log) noteUnreadLocked() error {
+	if r.imports || r.f == nil {
+		return nil
+	}
+	if err := r.append(unreadLine{Unread: "the run ended before its entry compiled"}, false); err != nil {
+		return err
+	}
+	r.imports = true
+	return nil
 }
 
 // Finished reports whether the record of ref under dir holds the footer a finished run

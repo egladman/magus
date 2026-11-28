@@ -2,6 +2,8 @@ package buzz
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -3995,4 +3997,76 @@ func TestSessionWithoutObserverIsUnchanged(t *testing.T) {
 	for _, name := range []string{"a", "b", "c", "d", "e"} {
 		assert.Equal(t, plain.Globals()[name].String(), observed.Globals()[name].String(), "global %s", name)
 	}
+}
+
+type ImportDigestsSuite struct {
+	suite.Suite
+	dir string
+}
+
+func TestImportDigestsSuite(t *testing.T) { suite.Run(t, new(ImportDigestsSuite)) }
+
+func (s *ImportDigestsSuite) SetupTest() {
+	s.dir = s.T().TempDir()
+	s.write("flat.buzz", `import "probe"; export final fromFlat = probe\ping("flat");`)
+	s.write("aliased.buzz", `export final fromAlias = 1;`)
+}
+
+func (s *ImportDigestsSuite) write(name, src string) {
+	s.Require().NoError(os.WriteFile(filepath.Join(s.dir, name), []byte(src), 0o644))
+}
+
+func (s *ImportDigestsSuite) sum(name string) (string, string) {
+	abs, err := filepath.Abs(filepath.Join(s.dir, name))
+	s.Require().NoError(err)
+	data, err := os.ReadFile(abs)
+	s.Require().NoError(err)
+	sum := sha256.Sum256(data)
+	return abs, hex.EncodeToString(sum[:])
+}
+
+const importingSource = `
+import "probe";
+import "flat";
+import "aliased" as al;
+final fromEntry = probe\ping("entry");
+`
+
+// A flat import runs its top level while the entry compiles. Its call comes before
+// the digests, and the entry's own top level after them.
+func (s *ImportDigestsSuite) TestImportDigestsArriveOnceBetweenCompileAndRun() {
+	obs := &passThrough{}
+	var got []map[string]string
+	sess, _, _ := newNativeSession(s.T(), WithCallInterceptor(obs), WithSearchPaths(filepath.Join(s.dir, "?.buzz")),
+		WithImportDigests(func(d map[string]string) error {
+			got = append(got, d)
+			obs.seen = append(obs.seen, "digests")
+			return nil
+		}))
+	s.Require().NoError(sess.Exec(s.T().Context(), importingSource))
+	s.Require().NoError(sess.Exec(s.T().Context(), `final again = 1;`))
+
+	flatPath, flatSum := s.sum("flat.buzz")
+	aliasPath, aliasSum := s.sum("aliased.buzz")
+	s.Equal([]map[string]string{{flatPath: flatSum, aliasPath: aliasSum}}, got, "a flat and an aliased import, once")
+	s.Equal([]string{"probe.ping flat", "digests", "probe.ping entry"}, obs.seen)
+}
+
+func (s *ImportDigestsSuite) TestAnErrorFromTheDigestsLeavesTheEntryUnrun() {
+	refusal := errors.New("import changed")
+	sess, _, ran := newNativeSession(s.T(), WithSearchPaths(filepath.Join(s.dir, "?.buzz")),
+		WithImportDigests(func(map[string]string) error { return refusal }))
+	s.Require().ErrorIs(sess.Exec(s.T().Context(), importingSource), refusal)
+	s.Equal([]string{"ping flat"}, *ran, "the import's top level ran during the compile; the entry's did not")
+}
+
+func (s *ImportDigestsSuite) TestAScriptWithNoFileImportGetsAnEmptyMap() {
+	var got map[string]string
+	sess, _, _ := newNativeSession(s.T(), WithImportDigests(func(d map[string]string) error {
+		got = d
+		return nil
+	}))
+	s.Require().NoError(sess.Exec(s.T().Context(), `import "probe"; final x = probe\ping("x");`))
+	s.NotNil(got, "a native module is no file, and the map still arrives")
+	s.Empty(got)
 }

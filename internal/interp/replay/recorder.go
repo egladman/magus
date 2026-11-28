@@ -49,6 +49,16 @@ func NewRecorder(r *Log) *Recorder {
 	return p
 }
 
+// Imports writes the run's import digests, path to sha256 hex, into the record. It fits
+// the callback gopherbuzz's WithImportDigests takes. A record already holding its
+// imports refuses a second set.
+func (p *Recorder) Imports(digests map[string]string) error {
+	if p.unreadable != nil {
+		return p.unreadable
+	}
+	return p.rec.noteImports(digests)
+}
+
 // InterceptCall runs call between a synced begin line and an end line, so a reboot inside it
 // leaves the call open. A call that fails while ctx is done stays open too. A begin-line
 // store error fails the call unrun. An end-line one is joined to the call's error and

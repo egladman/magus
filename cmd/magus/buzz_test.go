@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -444,11 +446,14 @@ func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
 type BuzzRecordSuite struct {
 	suite.Suite
 	root string
+	// name is the script name run and place use. A script that imports a file needs a
+	// path, so its imports resolve beside it.
+	name string
 }
 
 func TestBuzzRecordSuite(t *testing.T) { suite.Run(t, new(BuzzRecordSuite)) }
 
-func (s *BuzzRecordSuite) SetupTest() { s.root = s.T().TempDir() }
+func (s *BuzzRecordSuite) SetupTest() { s.root, s.name = s.T().TempDir(), "probe.buzz" }
 
 func (s *BuzzRecordSuite) TestRecordKeepsArgsAndLeaseInTheDescriptor() {
 	args := []string{"a", "b"}
@@ -555,13 +560,13 @@ func (s *BuzzRecordSuite) run(p *probe, script string, opts interp.ScriptOptions
 	p.install(runner)
 	opts.Record = true
 	var err error
-	stderr := captureStderr(s.T(), func() { err = runner.RunSource(ctx, s.root, opts, "probe.buzz", script, nil) })
+	stderr := captureStderr(s.T(), func() { err = runner.RunSource(ctx, s.root, opts, s.name, script, nil) })
 	return stderr, err
 }
 
 // place is where the record of script lives.
 func (s *BuzzRecordSuite) place(script string) (dir, ref string) {
-	cacheDir, _, _, key, err := recordKey(testkit.WithEnvResolver(s.T().Context()), s.root, "probe.buzz", script, nil, false)
+	cacheDir, _, _, key, err := recordKey(testkit.WithEnvResolver(s.T().Context()), s.root, s.name, script, nil, false)
 	s.Require().NoError(err)
 	return filepath.Join(cacheDir, "replay"), cache.PortableRef(key)
 }
@@ -665,6 +670,64 @@ func (s *BuzzRecordSuite) TestAnInterruptedCallThatCannotRepeatRefusesTheRerun()
 	s.ErrorIs(err, replay.RefusalOutcomeUnknown)
 	s.ErrorContains(err, "call #1 proc.exec")
 	s.Empty(second.ran, "the interrupted call was not run again")
+}
+
+const importingStepScript = `import "probe";
+import "lib";
+final a = probe\step(1);
+final b = probe\step(2);
+probe\report(a + b + lib);
+`
+
+// importing names the script by a path in the root, beside a lib.buzz holding src.
+func (s *BuzzRecordSuite) importing(src string) string {
+	s.name = filepath.Join(s.root, "main.buzz")
+	lib := filepath.Join(s.root, "lib.buzz")
+	s.Require().NoError(os.WriteFile(lib, []byte(src), 0o644))
+	return lib
+}
+
+func (s *BuzzRecordSuite) TestARecordedRunHoldsItsImportDigests() {
+	lib := s.importing(`export final lib = 1;`)
+	_, err := s.run(&probe{step: "math.step"}, importingStepScript, interp.ScriptOptions{})
+	s.Require().NoError(err)
+
+	dir, ref := s.place(importingStepScript)
+	h, _, err := replay.Read(dir, ref)
+	s.Require().NoError(err)
+	abs, err := filepath.Abs(lib)
+	s.Require().NoError(err)
+	sum := sha256.Sum256([]byte(`export final lib = 1;`))
+	s.Equal(map[string]string{abs: hex.EncodeToString(sum[:])}, h.Imports)
+}
+
+func (s *BuzzRecordSuite) TestAChangedImportRefusesTheRerunNamingTheFile() {
+	lib := s.importing(`export final lib = 1;`)
+	_, err := s.run(&probe{step: "math.step", dieAt: 2}, importingStepScript, interp.ScriptOptions{})
+	s.Require().Error(err)
+	s.Require().NoError(os.WriteFile(lib, []byte(`export final lib = 2;`), 0o644))
+
+	second := &probe{step: "math.step"}
+	_, err = s.run(second, importingStepScript, interp.ScriptOptions{})
+	s.Require().ErrorIs(err, replay.RefusalImportChanged)
+	s.ErrorContains(err, "lib.buzz changed: recorded sha256 ")
+	s.ErrorContains(err, "run again with --restart to discard the record and start from the top")
+	s.Empty(second.ran, "the entry's top level did not run")
+
+	_, err = s.run(&probe{step: "math.step"}, importingStepScript, interp.ScriptOptions{Restart: true})
+	s.NoError(err, "--restart is the remedy")
+}
+
+func (s *BuzzRecordSuite) TestAnUnchangedImportResumes() {
+	s.importing(`export final lib = 1;`)
+	_, err := s.run(&probe{step: "math.step", dieAt: 2}, importingStepScript, interp.ScriptOptions{})
+	s.Require().Error(err)
+
+	again := &probe{step: "math.step"}
+	_, err = s.run(again, importingStepScript, interp.ScriptOptions{})
+	s.Require().NoError(err)
+	s.Equal([]int64{2}, again.ran)
+	s.Equal(int64(11+21+1), again.reported)
 }
 
 func (s *BuzzRecordSuite) scriptCheckRow(id, root, script string) job.Job {

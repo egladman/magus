@@ -77,8 +77,23 @@ type Header struct {
 	Format string   `json:"format"`
 	Script string   `json:"script"`
 	Args   []string `json:"args"`
-	// Imports maps each imported file's path to the sha256 hex of its content.
+	// Imports maps each imported file's absolute path to the sha256 hex of its content.
+	// It comes from the record's imports line, written once the entry compiles. It is
+	// nil for a record that holds none.
+	Imports map[string]string `json:"-"`
+	// ImportsUnread is why a run that ended wrote no imports, empty when it wrote them.
+	ImportsUnread string `json:"-"`
+}
+
+// importsLine is the line that holds a run's import digests. An empty map is a run
+// that imported no file, so the key is kept.
+type importsLine struct {
 	Imports map[string]string `json:"imports"`
+}
+
+// unreadLine is the line a run that ended writes when its imports never arrived.
+type unreadLine struct {
+	Unread string `json:"imports_unread"`
 }
 
 // Call is one call in a record. A record holds one line when the call begins

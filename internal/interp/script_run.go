@@ -94,6 +94,9 @@ type ScriptRunner struct {
 type ReplayLog struct {
 	// Interceptor is installed on the run's session.
 	Interceptor vm.CallInterceptor
+	// Imports takes the run's import digests once its entry compiles. An error stops
+	// the run before the entry's top level. nil asks the session for none.
+	Imports func(digests map[string]string) error
 	// Attach hands the log the run's session, once it exists. nil when the log has no use for it.
 	Attach func(sess *buzz.Session)
 	// DiedIn names the call a run that failed with err was inside, "#<seq> <name>", or
@@ -268,6 +271,9 @@ func newScriptSession(ctx context.Context, o ScriptOptions, name string, calls *
 	var opts []buzz.Option
 	if calls != nil {
 		opts = append(opts, buzz.WithCallInterceptor(calls.Interceptor))
+		if calls.Imports != nil {
+			opts = append(opts, buzz.WithImportDigests(calls.Imports))
+		}
 	}
 	// -e is the one-off exception: a snippet takes the embedded rules, as python -c
 	// needs no main. Files and stdin stay strict.

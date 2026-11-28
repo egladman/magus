@@ -3,6 +3,7 @@ package buzz
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -109,6 +111,15 @@ type Session struct {
 	// the ctx each VM is built from, which is how fiber and callback VMs inherit
 	// it. nil in normal runs. See WithCallInterceptor.
 	interceptor vmpackage.CallInterceptor
+	// importSums hashes every file an import reads. Child and alias sessions share it,
+	// so it holds the whole closure. nil unless WithImportDigests asked for it.
+	importSums *importDigests
+	// importsCompiled is WithImportDigests's callback. Exec moves it to entryCompiled
+	// on the first run, so it fires once.
+	importsCompiled func(digests map[string]string) error
+	// entryCompiled runs after the entry chunk compiles and before it runs. exec takes
+	// it before compiling, so an import compiled inside never sees it.
+	entryCompiled func() error
 	// searchPaths is the ordered list of path templates searched when an import
 	// statement names a module not yet bound in the session. Each template holds
 	// `?` (replaced with the import path) and may reference environment variables
@@ -449,10 +460,37 @@ func (s *Session) SetSourceReader(fn func(path string) ([]byte, error)) {
 
 // readImportSource reads one resolved import through the host's reader, if any.
 func (s *Session) readImportSource(path string) ([]byte, error) {
+	read := os.ReadFile
 	if s.sourceReader != nil {
-		return s.sourceReader(path)
+		read = s.sourceReader
 	}
-	return os.ReadFile(path)
+	data, err := read(path)
+	if err == nil && s.importSums != nil {
+		s.importSums.note(path, data)
+	}
+	return data, err
+}
+
+// importDigests is the sha256 of each file a session's imports read, by absolute path.
+type importDigests struct {
+	mu   sync.Mutex
+	sums map[string]string
+}
+
+func (d *importDigests) note(path string, data []byte) {
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	sum := sha256.Sum256(data)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.sums[path] = hex.EncodeToString(sum[:])
+}
+
+func (d *importDigests) snapshot() map[string]string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return maps.Clone(d.sums)
 }
 
 // newSession is the raw embedding primitive: it defaults to embedded parsing
@@ -727,6 +765,16 @@ func WithCallInterceptor(obs vmpackage.CallInterceptor) Option {
 	return func(s *Session) { s.interceptor = obs }
 }
 
+// WithImportDigests calls fn once with the sha256 hex of each imported file by
+// absolute path, after the entry compiles and before it runs. An error from fn
+// fails Exec.
+func WithImportDigests(fn func(digests map[string]string) error) Option {
+	return func(s *Session) {
+		s.importSums = &importDigests{sums: map[string]string{}}
+		s.importsCompiled = fn
+	}
+}
+
 // NewSession creates a Buzz execution context. Inject globals with SetGlobal
 // and register target callbacks via Targets. Close releases the context.
 //
@@ -774,6 +822,7 @@ func (s *Session) NewChild() *Session {
 	c.moduleResolver = s.moduleResolver
 	c.importFile = s.importFile
 	c.sourceReader = s.sourceReader
+	c.importSums = s.importSums
 	c.parseCache = s.parseCache
 	c.scanner = s.scanner
 	c.interceptor = s.interceptor
@@ -815,8 +864,23 @@ func (s *Session) Exec(ctx context.Context, code string) error {
 	// here rather than in exec, which imported files also go through: they must
 	// not overwrite the importer's.
 	s.ownNamespace = s.declaredNamespace(code)
+	if fn := s.importsCompiled; fn != nil {
+		s.importsCompiled = nil
+		s.entryCompiled = func() error { return fn(s.importSums.snapshot()) }
+	}
 	_, err := s.exec(ctx, code)
 	return err
+}
+
+// takeEntryCompiled returns the hook the entry runs once compiled, or a no-op.
+// Taking it clears it, so an exec nested in the compile never fires it.
+func (s *Session) takeEntryCompiled() func() error {
+	fn := s.entryCompiled
+	s.entryCompiled = nil
+	if fn == nil {
+		return func() error { return nil }
+	}
+	return fn
 }
 
 // exec is Exec's workhorse, additionally returning the names this chunk
@@ -825,11 +889,15 @@ func (s *Session) Exec(ctx context.Context, code string) error {
 // tell that a module re-exported a name another module already exported, which
 // would silently drop the later module's export from its namespace object.
 func (s *Session) exec(ctx context.Context, code string) ([]string, error) {
+	compiled := s.takeEntryCompiled()
 	if s.bytecodeStore != nil {
-		return s.execCached(ctx, code)
+		return s.execCached(ctx, code, compiled)
 	}
 	chunk, err := s.compileShared(ctx, code)
 	if err != nil {
+		return nil, err
+	}
+	if err := compiled(); err != nil {
 		return nil, err
 	}
 	return s.runChunk(ctx, chunk)
@@ -838,12 +906,15 @@ func (s *Session) exec(ctx context.Context, code string) ([]string, error) {
 // execCached is exec through the bytecode store: it runs a saved chunk when
 // one is still fresh, and otherwise compiles while recording what the chunk
 // depends on, then saves it.
-func (s *Session) execCached(ctx context.Context, code string) ([]string, error) {
+func (s *Session) execCached(ctx context.Context, code string, compiled func() error) ([]string, error) {
 	chunk, replayed, hit, err := s.loadCachedChunk(ctx, code)
 	if err != nil {
 		return nil, err
 	}
 	if hit {
+		if err := compiled(); err != nil {
+			return nil, err
+		}
 		exports, err := s.runChunk(ctx, chunk)
 		if err != nil {
 			return nil, err
@@ -856,6 +927,9 @@ func (s *Session) execCached(ctx context.Context, code string) ([]string, error)
 	frame := s.importFrames[len(s.importFrames)-1]
 	s.importFrames = s.importFrames[:len(s.importFrames)-1]
 	if err != nil {
+		return nil, err
+	}
+	if err := compiled(); err != nil {
 		return nil, err
 	}
 	exports, err := s.runChunk(ctx, chunk)
@@ -3068,6 +3142,7 @@ func (s *Session) loadIsolated(ctx context.Context, src, dir string) (*cachedImp
 		sub.disableFFI()
 	}
 	sub.sourceReader = s.sourceReader
+	sub.importSums = s.importSums
 	sub.parseCache = s.parseCache
 	sub.scanner = s.scanner
 	sub.compileObserver = s.compileObserver

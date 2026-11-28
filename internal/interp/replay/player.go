@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -22,9 +24,13 @@ type refusalError struct {
 	Detail string
 }
 
-// Error names the reason, the call and the remedy.
+// Error names the reason, the call and the remedy. A refusal of the imports names no
+// call.
 func (e *refusalError) Error() string {
-	return fmt.Sprintf("resume refused: %s at call #%d %s: %s: %s", e.Reason, e.Call.Seq, e.Call.Name, e.Detail, remedy)
+	if e.Call.Name == "" {
+		return fmt.Sprintf("resume refused: %s: %s: %s", string(e.Reason), e.Detail, remedy)
+	}
+	return fmt.Sprintf("resume refused: %s at call #%d %s: %s: %s", string(e.Reason), e.Call.Seq, e.Call.Name, e.Detail, remedy)
 }
 
 // Unwrap lets errors.Is match the reason.
@@ -193,6 +199,53 @@ func (p *Player) noteRefusalLocked(reason Refusal, at Call, detail string) {
 	if p.refusal == nil {
 		p.refusal = &refusalError{Reason: reason, Call: at, Detail: detail}
 	}
+}
+
+// Imports refuses a rerun whose import digests differ from the record's, as
+// import-changed, naming the first file that differs by path order. A record that holds
+// no digests is refused too, since a change cannot be ruled out. It fits the callback
+// gopherbuzz's WithImportDigests takes.
+func (p *Player) Imports(digests map[string]string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.refusal != nil {
+		return p.refusal
+	}
+	if detail := importsDiffer(p.header, digests); detail != "" {
+		return p.refuseLocked(RefusalImportChanged, Call{}, detail)
+	}
+	return nil
+}
+
+// importsDiffer says how digests differ from h's, or "" when they match.
+func importsDiffer(h Header, digests map[string]string) string {
+	if h.Imports == nil {
+		why := h.ImportsUnread
+		if why == "" {
+			why = "the run that wrote it died before its entry compiled"
+		}
+		return "the record holds no import digests: " + why
+	}
+	paths := slices.Collect(maps.Keys(h.Imports))
+	for path := range digests {
+		if _, ok := h.Imports[path]; !ok {
+			paths = append(paths, path)
+		}
+	}
+	slices.Sort(paths)
+	for _, path := range paths {
+		was, recorded := h.Imports[path]
+		now, imported := digests[path]
+		switch {
+		case !recorded:
+			return path + " is imported now and was not when the run was recorded"
+		case !imported:
+			return path + " was imported when the run was recorded and is not now"
+		case was != now:
+			return fmt.Sprintf("%s changed: recorded sha256 %.12s, now %.12s", path, was, now)
+		}
+	}
+	return ""
 }
 
 // Err is the refusal that stopped the replay, nil while nothing was refused.

@@ -255,16 +255,16 @@ func recordKey(ctx context.Context, root, name, code string, args []string, test
 }
 
 // openReplayLog opens a run's replay log beside the output store, under the ref
-// its output prints. The header lists no imports, since a session knows them only after
-// it runs.
+// its output prints. The session reports the run's imports once the entry compiles: a
+// fresh record writes them, and a resumed one is refused if they changed.
 func openReplayLog(ctx context.Context, root string, rec interp.ScriptRecord, restart bool) (*interp.ReplayLog, error) {
 	cacheDir, _, _, key, err := recordKey(ctx, root, rec.Name, rec.Code, rec.Args, false)
 	if err != nil {
 		return nil, err
 	}
 	dir, ref := filepath.Join(cacheDir, "replay"), cache.PortableRef(key)
-	header := replay.Header{Script: rec.Name, Args: rec.Args, Imports: map[string]string{}}
-	earlier, err := earlierCalls(dir, ref, restart)
+	header := replay.Header{Script: rec.Name, Args: rec.Args}
+	recorded, earlier, resumes, err := earlierCalls(dir, ref, restart)
 	if err != nil {
 		return nil, fmt.Errorf("magus buzz: --record: %w", err)
 	}
@@ -275,6 +275,7 @@ func openReplayLog(ctx context.Context, root string, rec interp.ScriptRecord, re
 	recorder := replay.NewRecorder(store)
 	log := &interp.ReplayLog{
 		Interceptor: recorder,
+		Imports:     recorder.Imports,
 		DiedIn: func(runErr error) string {
 			if c, ok := recorder.DiedIn(runErr); ok {
 				return fmt.Sprintf("#%d %s", c.Seq, c.Name)
@@ -283,15 +284,15 @@ func openReplayLog(ctx context.Context, root string, rec interp.ScriptRecord, re
 		},
 	}
 	var player *replay.Player
-	if len(earlier) > 0 {
+	if resumes {
 		var sess *buzz.Session
 		defOf := func(typeName string) (vm.Value, bool) {
 			def := sess.GetGlobal(typeName)
 			return def, def.IsObjectDef()
 		}
 		fmt.Fprintf(os.Stderr, "resuming %s: %d calls on record\n", ref, len(earlier))
-		player = replay.NewPlayer(header, earlier, replay.NativeClass, defOf, recorder)
-		log.Interceptor = player
+		player = replay.NewPlayer(recorded, earlier, replay.NativeClass, defOf, recorder)
+		log.Interceptor, log.Imports = player, player.Imports
 		log.Attach = func(s *buzz.Session) { sess = s }
 	}
 	log.Close = func(ended bool, runErr error) error {
@@ -300,20 +301,21 @@ func openReplayLog(ctx context.Context, root string, rec interp.ScriptRecord, re
 	return log, nil
 }
 
-// earlierCalls is the record of ref a rerun resumes. A finished run's record is discarded
-// so the rerun starts a new attempt, and restart discards one that is not.
-func earlierCalls(dir, ref string, restart bool) ([]replay.Call, error) {
+// earlierCalls is the record of ref a rerun resumes, and resumes is false when there is
+// none. A finished run's record is discarded so the rerun starts a new attempt, and
+// restart discards one that is not.
+func earlierCalls(dir, ref string, restart bool) (h replay.Header, calls []replay.Call, resumes bool, err error) {
 	finished, err := replay.Finished(dir, ref)
 	switch {
 	case errors.Is(err, replay.RefusalNoRecord):
-		return nil, nil
+		return replay.Header{}, nil, false, nil
 	case err != nil:
-		return nil, err
+		return replay.Header{}, nil, false, err
 	case restart || finished:
-		return nil, replay.Discard(dir, ref)
+		return replay.Header{}, nil, false, replay.Discard(dir, ref)
 	}
-	_, calls, err := replay.Read(dir, ref)
-	return calls, err
+	h, calls, err = replay.Read(dir, ref)
+	return h, calls, err == nil, err
 }
 
 // closeReplay ends the record. A run that reached its end on its own gets the

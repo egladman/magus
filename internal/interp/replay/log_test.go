@@ -20,7 +20,7 @@ func TestStore(t *testing.T) { suite.Run(t, new(StoreSuite)) }
 
 func (s *StoreSuite) SetupTest() {
 	s.dir = s.T().TempDir()
-	s.header = Header{Script: "hack/dev/land.buzz", Args: []string{"--dry-run"}, Imports: map[string]string{"lib.buzz": "ab12"}}
+	s.header = Header{Script: "hack/dev/land.buzz", Args: []string{"--dry-run"}}
 }
 
 func call(seq, parent int, name string) Call {
@@ -33,17 +33,19 @@ func (s *StoreSuite) TestStoreFoldsBeginAndEnd() {
 	s.Require().NoError(r.begin(call(0, -1, "fs.readFile")))
 	s.Require().NoError(r.begin(call(1, 0, "os.time")))
 	s.Require().NoError(r.end(1, callReturned, outcome{Result: "12"}))
+	s.Require().NoError(r.noteImports(map[string]string{"/w/lib.buzz": "ab12"}))
 	s.Require().NoError(r.end(0, callRaised, outcome{Error: "no such file"}))
 	s.Require().NoError(r.Close())
 
 	raw, err := os.ReadFile(filepath.Join(s.dir, "out1", "calls.jsonl"))
 	s.Require().NoError(err)
 	s.Contains(string(raw), `"format":"magus.replay/v1alpha1"`)
+	s.Contains(string(raw), `{"imports":{"/w/lib.buzz":"ab12"}}`, "the digests are a line of their own")
 
 	h, calls, err := Read(s.dir, "out1")
 	s.Require().NoError(err)
 	want := s.header
-	want.Format = format
+	want.Format, want.Imports = format, map[string]string{"/w/lib.buzz": "ab12"}
 	s.Equal(want, h)
 	s.Equal([]Call{
 		{Seq: 0, Parent: -1, Name: "fs.readFile", ArgsDigest: "dfs.readFile", End: callRaised, Error: "no such file", StartedAt: 0},
@@ -97,6 +99,22 @@ func (s *StoreSuite) TestStoreRefusesASecondWriter() {
 	second, err := OpenLog(s.dir, "out1", s.header)
 	s.Require().NoError(err, "a released claim can be taken")
 	s.Require().NoError(second.Close())
+}
+
+func (s *StoreSuite) TestARunThatEndsWithoutImportsSaysSo() {
+	r, err := OpenLog(s.dir, "out1", s.header)
+	s.Require().NoError(err)
+	s.Require().NoError(r.Close())
+
+	h, _, err := Read(s.dir, "out1")
+	s.Require().NoError(err)
+	s.Nil(h.Imports, "no digests arrived, so none are read back")
+	s.Equal("the run ended before its entry compiled", h.ImportsUnread)
+
+	again, err := OpenLog(s.dir, "out1", s.header)
+	s.Require().NoError(err)
+	s.ErrorContains(again.noteImports(map[string]string{}), "already holds its imports", "a record holds one imports line")
+	s.Require().NoError(again.Close())
 }
 
 func (s *StoreSuite) TestAReopenedRecordMustBeItsOwn() {
