@@ -254,21 +254,25 @@ func UnresolvedError(plan Plan) error {
 	return fmt.Errorf("%d conflict(s) still need you, resolve them, stage them, and continue", len(plan.Manual))
 }
 
-// OwedByHand is `magus vcs resolve` with nothing conflicted. It runs, one run per
-// target, what the branch's range against res.Base owes and what the merge driver
-// recorded, then clears the record. It stages nothing: it names the backend's review
-// command and the fold the outputs take. With nothing owed it says so.
+// OwedByHand is `magus vcs resolve` with nothing conflicted. It runs what the
+// branch's range against res.Base owes and what the merge driver recorded, one
+// run per target, then clears the record. It stages nothing. A range it cannot
+// read, as with no base ref, still runs the recorded work and says so; with
+// nothing recorded it refuses.
 func OwedByHand(ctx context.Context, out io.Writer, m *magus.Magus, res types.VCSResolution, defines func(path, target string) bool, run RunFunc) error {
 	generates := func(project string) bool { return defines(project, "generate") }
-	owed, err := changeset.RegenerationOwed(ctx, m.Root(), res.VCS, res.Base, m.ClassifyFiles, generates)
-	if err != nil {
-		return fmt.Errorf("vcs resolve: what the branch owes is unknown: %w", err)
-	}
+	owed, owedErr := changeset.RegenerationOwed(ctx, m.Root(), res.VCS, res.Base, m.ClassifyFiles, generates)
 	recorded, err := vcs.OwedRegenerations(ctx, m.Root())
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
 	ran := Invocations(owed.Owed.Projects, recorded, defines)
+	if owedErr != nil {
+		if len(ran) == 0 {
+			return fmt.Errorf("vcs resolve: what the branch owes is unknown: %w", owedErr)
+		}
+		fmt.Fprintf(out, "vcs resolve: what the branch owes is unknown (%v); running only what the merge driver recorded\n", owedErr)
+	}
 	if len(ran) == 0 {
 		fmt.Fprintf(out, "vcs resolve: nothing to resolve; no conflicted paths, no recorded regeneration, and %s..%s owes none\n", owed.Owed.Base, owed.Owed.Head)
 		return nil
