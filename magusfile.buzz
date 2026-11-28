@@ -401,10 +401,17 @@ export fun opencode_runtime_generate(ctx: magus\Context, args: [str]) > void !> 
 
 // Places the development binary and its harnesses as one readiness operation.
 export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
+    // installAndVerifyHooks writes every harness's host files, not only the tool rows,
+    // so each host's hooks, agents, rules and plugin files are declared here too.
     ctx.writesFiles([
         ".claude/magus/tools/*", ".codex/magus/tools/*",
         ".cursor/magus/tools/*", ".opencode/magus/tools/*",
         ".opencode/magus/magus-opencode.wasm",
+        ".codex/hooks.json", ".codex/agents/*.toml", ".codex/rules/magus.rules",
+        ".cursor/hooks.json", ".cursor/agents/*.md",
+        ".opencode/agents/*.md", ".opencode/plugins/magus.js",
+        ".opencode/magus/probe.ts", ".opencode/magus/wasm_exec.js",
+        "opencode.json",
     ]);
     final linked = link_magus(ctx, binary: "magus");
     if (linked.error != null) { throw linked.error!; }
