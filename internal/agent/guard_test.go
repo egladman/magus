@@ -91,6 +91,8 @@ var templateDirScaffolding = map[string]bool{
 	// copies into a host; see the note at its top for the split with the file
 	// above.
 	"opencode-plugin.live.test.ts": true,
+	// A script events are piped through, not a guard template: no version, no coverage.
+	"magus-notify-claude-code.buzz": true,
 }
 
 // TestEveryShippedTemplateIsRegistered closes the gate the other parity tests

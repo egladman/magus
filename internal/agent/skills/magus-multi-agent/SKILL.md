@@ -45,7 +45,7 @@ The guard enforces this by role, and the role is the live lease: the root may ta
 
 Before any partitioning, the plan lists its interfaces in one table. An interface is
 anything two pieces of work both touch: a function, a type, an event, a file's row
-shape, a config key, a command's arguments. One row each:
+shape, a config key, a command's arguments.{{if .Full}} One row each:
 
 | column | holds |
 | --- | --- |
@@ -55,7 +55,9 @@ shape, a config key, a command's arguments. One row each:
 | stub | one sentence: what it answers correctly, what it refuses and with what message |
 | test | the test that runs the stub |
 | filled by | the chunk that replaces the body, or `final` when the stub is the body |
-| used by | the chunks that call it |
+| used by | the chunks that call it |{{else}} One row each, with columns name, file (one file, no consumer's
+code), signature, stub (what it answers, what it refuses and how), test, filled by (the
+chunk, or `final`) and used by.{{end}}
 
 An honest stub is a minimal real implementation: it answers what it can correctly and
 refuses the rest loudly. It is never a panic, a mock or a zero value{{if .Full}}, which pass
@@ -88,8 +90,8 @@ enough to be worth one{{end}}.
 - A depends-on chain is ONE worker in sequence, not two workers in turn{{if .Full}}.
   Two is two loads for one unit of work, and the second starts by rediscovering
   what the first just learned{{end}}.
-- For the rest, read the grouping metric (`{{buzz "workspace.grouping"}}` through `{{tool "client"}}`,
-  or `grouping history` in `{{cmd "describe job"}} <job>`) and weigh each measured shape
+- For the rest, read the grouping metric ({{if .Full}}`{{buzz "workspace.grouping"}}` through `{{tool "client"}}`,
+  or {{end}}`grouping history` in `{{cmd "describe job"}} <job>`) and weigh each measured shape
   against the others{{if .Full}}: chained, split and solo each report the load before a
   first write and the context, wall time and collisions per group{{end}}. It reports
   and never decides{{if .Full}}; a person writes any standing grouping policy{{end}}.
@@ -133,7 +135,7 @@ list on every retry:{{else}}Keep the worker's job id, outcome, changed paths, va
 Save full records separately. Reuse the spec in `$job_spec` for retries.{{end}}
 
 ```sh
-{{cmd "job fork"}} --stdin --dry-run -o 'template={{"{{.job.id}}{{range .problems}}{{println}}{{.message}}{{end}}{{range .unchecked}}{{println}}{{.}}{{end}}"}}' < "$job_spec"
+{{cmd "job fork"}} --stdin --dry-run -o 'template={{"{{range .problems}}{{.code}} {{.message}}{{println}}{{end}}"}}' < "$job_spec"
 ```
 
 {{if .Full}}Tell the person what changed, what passed, what remains unverified, and any decision
@@ -251,11 +253,12 @@ ambiguous API boundary does not get the cheapest model because it looked like le
 work.
 
 Naming it is the checkable half: every spawn names a model, or an agent definition
-that names one.
+that names one.{{if .Full}}
 
-- Inheriting the parent's model ON PURPOSE is fine and often right{{if .Full}}, such as a hard review under a cheaper coordinator{{end}}.
+- Inheriting the parent's model ON PURPOSE is fine and often right, such as a hard review under a cheaper coordinator.
 - Inheriting it BY OMISSION is the failure. A host defaulting to "same as the parent"
-  makes every unnamed spawn the most expensive one, and records no choice.
+  makes every unnamed spawn the most expensive one, and records no choice.{{else}} Inheriting the parent's model on
+purpose is fine; by omission is the failure, since it records no choice.{{end}}
 
 When the tier is unclear, start at routine. A job that fails its criteria there is
 re-forked one tier up, not retried at the same one.{{if .Full}} Routine is a starting
@@ -277,13 +280,13 @@ is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at routine:
-
-- Fork one read-only job per claim, input, or variant, and run them all at once.
-  Give each a script check, so `{{cmd "job wait"}}` can pass it.
-- Spawn the `magus-scout` agent for each where your harness installed it.
-- Each reports its command and output ref{{if .Full}}, so evidence settles the claim and not a worker's reading{{end}}.
-- The design tier only reconciles the claims where workers disagree.
+To prove something, brute-force it at routine: fork one read-only job per claim, input
+or variant, all at once, each with a script check so `{{cmd "job wait"}}` can pass it{{if .Full}}.
+Spawn the `magus-scout` agent for each where your harness installed it. Each reports its
+command and output ref, so evidence settles the claim and not a worker's reading.
+The design tier only reconciles the claims where workers disagree{{else}}, or the `magus-scout`
+agent where installed. Each reports its command and output ref; the design tier only
+reconciles disagreements{{end}}.
 
 Keep routine jobs short-lived. The brief points at evidence (paths, output refs, the
 row) and carries no transcript.{{if .Full}} Some providers raise a tier's price past a prompt size.{{end}}
@@ -310,10 +313,10 @@ magus affected <target> --plan
 ```
 
 For a proposed change whose paths are known but not yet edited, plan those paths
-instead of the current diff (`--stdin --plan`, one repo-relative path per line).
+instead of the current diff (`--stdin --plan`, one repo-relative path per line).{{if .Full}}
 Read the JSON fields `count`, `max_parallel`, `source`, and `matrix`.
 Use a shard only as the first partition. If paths are unknown, query the task's symbols,
-files, and projects before producing a stdin plan.
+files, and projects before producing a stdin plan.{{else}} Use a shard only as the first partition.{{end}}
 
 ## Prove that jobs do not collide
 
@@ -353,9 +356,8 @@ When `{{cmd "job fork"}}` refuses one, the answer is a separate worktree, not a 
 boundary: fork with `--checkout <dir>` outside the workspace, never by hand.
 
 Fork records what it could prove in `write_proof` (`alone`, `disjoint` or
-`overlapping`), and `{{cmd "ls jobs"}}` prints it. An overlap is recorded, not refused:
-sequencing two jobs onto one path is your call{{if .Full}}, and the row records
-whether anybody checked{{end}}. Answer the guard's shared-checkout reminder with a proof or a
+`overlapping`). An overlap is recorded, not refused: sequencing two jobs onto one path
+is your call. Answer the guard's shared-checkout reminder with a proof or a
 worktree, not a judgment that it looks fine.
 
 Project boundaries alone are insufficient. A declared dependency means group the work
@@ -371,7 +373,7 @@ an editor magus cannot attribute{{end}}.
 
 1. Record the checkpoint you are handing out: `{{cmd "vcs checkpoint"}} -o name` prints
    the revision, plus a dirty-patch digest when the tree is not clean.
-2. Fork one job per unit, from flags:
+2. Fork one job per unit, from flags{{if .Full}}:
 
    ```sh
    magus job fork api-store --model <tier or model> \
@@ -382,15 +384,16 @@ an editor magus cannot attribute{{end}}.
    ```
 
    Or fork from a record with `{{cmd "job fork"}} --stdin`, the form that sets them;
-   [reference.md](reference.md) shows one.
+   [reference.md](reference.md) shows one.{{else}} (`--model`, `--instructions`, `--write-paths`, `--check`,
+   `--checkpoint`) or from a record with `{{cmd "job fork"}} --stdin` ([reference.md](reference.md)).{{end}}
 
    Before every fork, run `{{cmd "job fork"}} --stdin --dry-run`: it lists every problem with its code and fix, and writes nothing.
    `{{cmd "job fork"}} --schema` prints every field and the newest `api_version`.
 3. Spawn the worker with the description `<parent>/<role> <job>`: two words, a parent id and a role joined by `/`, then the job id.
    - A root job has no parent row, so its first word takes any label
-     (`orchestrator/feat api-store`).
+     (`orchestrator/feat api-store`).{{if .Full}}
    - A child reads `api-store/fix migrate`; the guard resolves the job as `migrate`,
-     else `api-store/migrate`.
+     else `api-store/migrate`.{{end}}
    - The role is a word for the work (`feat`, `fix`, `review`). A workspace spawn
      rule may restrict it, and its refusal names the list.
    - A title naming a row that no fork or apply validated is refused (`spawn-unvalidated`).
@@ -453,9 +456,9 @@ is the orchestrator's; a refused worker reports it as an unresolved risk and sto
 
 After the spawn, the row carries the job:
 
-- A worker records the base it LANDED on, which can differ from the checkpoint you
+{{if .Full}}- A worker records the base it LANDED on, which can differ from the checkpoint you
   handed it.
-- A denied worker coordinates and never works around.
+{{end}}- A denied worker coordinates and never works around.
 - Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
   not a pass.
 - Only a row with a check or postcondition can pass. Fork a scout `--read-only`; it passes only
@@ -490,12 +493,16 @@ Its merge (`hack/dev/merge-job-branches.buzz --apply`) then recomposes the landi
 branch's unpushed commits into one per merged job, each output beside its source, with no
 merge commit left and the merged tree byte-identical. A commit a remote ref already holds stays.
 
-As jobs finish: compare the store to the ACTUAL diff since each checkpoint; run
+{{if .Full}}As jobs finish: compare the store to the ACTUAL diff since each checkpoint; run
 `{{cmd "job wait"}} <job>` before reading each result. On rejection, give the
 same job and its `{{cmd "describe job"}} <job>` feedback to the worker handling
 the correction. Verify the corrected result on that job. Reopen evidence with
 `{{cmd "query output"}} <ref>`; resolve shared seams once; regenerate declared outputs
 once; re-plan with `{{cmd "affected"}} <target> --plan` if the partition broke; read
 `{{cmd "diff"}} --impact` for context only; validate once per wave; finish with
-`{{cmd "affected"}} ci`. [reference.md](reference.md#integrate-and-verify) has the
-mechanical wait checks and the wave loop.
+`{{cmd "affected"}} ci`.{{else}}As jobs finish: compare the store to the ACTUAL diff since each checkpoint and run
+`{{cmd "job wait"}} <job>` before reading a result. On rejection, give the same job and its
+`{{cmd "describe job"}} <job>` feedback to the worker handling the correction. Resolve shared
+seams and regenerate declared outputs once; re-plan with `{{cmd "affected"}} <target> --plan` if the
+partition broke; validate once per wave; finish with `{{cmd "affected"}} ci`.{{end}}
+[reference.md](reference.md#integrate-and-verify) has the mechanical wait checks and the wave loop.
