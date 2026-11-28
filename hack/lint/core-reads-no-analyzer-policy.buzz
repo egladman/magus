@@ -22,7 +22,8 @@ export fun reads() > [str] {
 fun nested(f: Path) > bool !> any {
     var dir = fs\dirname(f.value);
     while (dir != "." and dir != "/" and dir != "") {
-        if (fs\exists(f.base + "/" + dir + "/go.mod")) {
+        final probe = if (f.base == "") dir + "/go.mod" else f.base + "/" + dir + "/go.mod";
+        if (fs\exists(probe)) {
             return true;
         }
         dir = fs\dirname(dir);
@@ -82,4 +83,9 @@ test "a nested module is out of scope and the root's go.mod is not counted" {
     assert\equal(nested(paths[1]), want: false, message: "internal is root-module");
     assert\equal(paths[2].value, want: "libs/x/a.go", message: "sorted third");
     assert\equal(nested(paths[2]), want: true, message: "libs/x is its own module");
+}
+
+test "a workspace-relative path with an empty base finds its nested module" {
+    assert\equal(nested(Path{ value = "libs/conventions/a.go", base = "" }), want: true, message: "libs/conventions has its own go.mod");
+    assert\equal(nested(Path{ value = "internal/a.go", base = "" }), want: false, message: "internal is root-module");
 }
