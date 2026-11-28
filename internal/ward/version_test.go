@@ -2,6 +2,7 @@ package ward
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -113,13 +114,27 @@ func (s *RelinkSuite) TestQuotesARootAShellWouldSplit() {
 }
 
 func (s *RelinkSuite) TestTheStampRunsTheRelinkedBinaryAtTheRoot() {
-	s.Equal("/src/magus/magus --root /src/magus run go-build .", stampAt("/src/magus"))
-	s.Equal("./magus run go-build .", stampAt(""))
-	s.Equal(`'/a b/magus' --root '/a b' run go-build .`, stampAt("/a b"))
+	script := "'" + stampScript + "'"
+	s.Equal("GOEXPERIMENT=jsonv2 /src/magus/magus buzz -C /src/magus -e "+script, stampAt("/src/magus"))
+	s.Equal("GOEXPERIMENT=jsonv2 ./magus buzz -e "+script, stampAt(""))
+	s.Equal(`GOEXPERIMENT=jsonv2 '/a b/magus' buzz -C '/a b' -e `+script, stampAt("/a b"))
+}
+
+func (s *RelinkSuite) TestTheStampLinksTheTreesOwnStampWithoutATargetRun() {
+	s.Contains(stampScript, `stale\buildStamp(".")`)
+	s.Contains(stampScript, "bindings.buildStamp=")
+	s.Contains(stampScript, `"./cmd/magus"`)
+	s.NotContains(stampScript, "run go-build", "a target run regenerates generated output")
+}
+
+func (s *RelinkSuite) TestAStampItCannotTakeSaysSoAndLinksNothing() {
+	taken, linked := strings.Index(stampScript, "the build stamp was not taken"), strings.Index(stampScript, `proc\exec("go"`)
+	s.NotEqual(-1, taken)
+	s.Less(taken, linked, "the throw comes before the link")
 }
 
 func (s *RelinkSuite) TestTheRepairNamesTheRelinkThenTheStamp() {
-	s.Equal(fmt.Sprintf("relink ./magus, then stamp it, each alone on its line: `%s`, then `/r/magus --root /r run go-build .`", RelinkAt("/r")), RelinkAndStampAt("/r"))
+	s.Equal(fmt.Sprintf("relink ./magus, then stamp it, each alone on its line: `%s`, then `%s`", RelinkAt("/r"), stampAt("/r")), RelinkAndStampAt("/r"))
 }
 
 func TestPinnedRelease(t *testing.T) {

@@ -922,7 +922,8 @@ const onePerBase = "There is one binary per base commit: the checkout's integrat
 
 // relinkWhy is why the relink is the one remedy for whoever builds ./magus.
 const relinkWhy = "The relink loads no magusfile, so it runs while nothing loads the tree, and the binary it links embeds the tree's contract. " +
-	"It links no version and no go-build stamp, and the stale-binary rule reads an unstamped ./magus as stale, so the relinked binary then runs go-build, which loads the tree and stamps it. " +
+	"It links no go-build stamp, and the stale-binary rule reads an unstamped ./magus as stale, so the relinked binary then links itself again with the stamp hack/policy/stale.buzz computes. " +
+	"That runs no target, so no generated output is rewritten; a stamp it cannot take fails the line and links nothing. " +
 	"If the load error names a magusfile line instead, fix that line. " +
 	"If it names generated code the tree's sources moved past, regenerate it with `go generate ./<package>`, alone on its line, then relink."
 
