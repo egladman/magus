@@ -571,14 +571,6 @@ var Magus = Module{
 					Extern:  (func(context.Context, string) (int, error))(nil),
 				},
 				{
-					Name: "swap",
-					Doc: "Keeps value as key's last value in the calling agent's session and returns the one it replaces, " +
-						"\"\" the first time. Only callable inside a spawn, command, write or stop rule while the guard runs it.",
-					Args:    []Arg{{Name: "key"}, {Name: "value"}},
-					Returns: []Ret{{}},
-					Extern:  (func(context.Context, string, string) (string, error))(nil),
-				},
-				{
 					Name: "binary",
 					Doc: "The magus binary answering the guard: {path, stamp}. path is the running executable " +
 						"with symlinks resolved; stamp is the text its build passed through the linker, empty " +
