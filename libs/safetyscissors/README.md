@@ -84,6 +84,7 @@ verdict.
 | `budget`  | the slot limiter, machine-wide memory and slot claims, and the `Price` and `Pricer` types   |
 | `verdict` | what a rule answers about a call (defer, advise, ask, deny) and the `Stricter` merge        |
 | `step`    | one thing a program is about to do, as data, and the spec of each kind                      |
+| `access`  | attribute rules over who may do which act to which target, and the judge that denies by default |
 | `tier`    | the model tier set, a job's assignment and the spawn ceiling                                |
 | `session` | the append-only record of what each invocation did, its fold and its pruning                |
 | `journal` | the activity log of calls, one invocation's records, and the events in `journal/stream`     |
@@ -112,8 +113,8 @@ ADR 0050 part 7 has the full list.
 
 ## Not yet
 
-- A rule table and a judge. `verdict` holds the answers and `step` the calls, but the
-  module judges nothing; the caller writes its own rules.
+- A judge of steps. `step` holds the calls as data and judges nothing; `access` judges
+  only who may act, and the caller writes its own step rules.
 - Lifecycle verbs. The store has `Update`, `Mutate`, `Grade`, `Witness`, `Attest` and
   `ReportRun`; taking and ending a job stay in magus.
 - A spend limit. Nothing in the module consumes a `Price` yet.
