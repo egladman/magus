@@ -61,7 +61,7 @@ var Emit = Module{
 			Doc:     "A file to write: path, resolved as fs paths are when planned, and the template it holds.",
 			Args:    []Arg{{Name: "path"}, {Name: "template", Object: "Template"}},
 			Returns: []Ret{{Object: "File"}},
-			Impl:    EmitFileOf,
+			Impl:    EmitFile,
 		},
 		{
 			Name:    "plan",
@@ -81,7 +81,12 @@ func EmitLoad(ctx context.Context, path string, values map[string]any) (types.Re
 	}
 	t, problems := emit.Load(path, []byte(src), values)
 	if len(problems) > 0 {
-		return types.Fail[types.Template](problemsDiagnostic(path, problems, "fix each problem in the template or in values, then load again")), nil
+		return types.Fail[types.Template](types.Diagnostic{
+			Code:    string(problems[0].Code),
+			Message: strings.Join(problems.Lines(path), "\n"),
+			URL:     types.CodeURL(problems[0].Code),
+			Hint:    "fix each problem in the template or in values, then load again",
+		}), nil
 	}
 	return types.Ok(t), nil
 }
@@ -114,13 +119,18 @@ func EmitRender(ctx context.Context, t types.Template, path string) (types.Resul
 	}
 	out, problems := emit.Render(fromBuzz(t), path, index)
 	if len(problems) > 0 {
-		return types.Fail[string](problemsDiagnostic(templateName(t), problems, "fix each problem in the template or its values, then render again")), nil
+		return types.Fail[string](types.Diagnostic{
+			Code:    string(problems[0].Code),
+			Message: strings.Join(problems.Lines(templateName(t)), "\n"),
+			URL:     types.CodeURL(problems[0].Code),
+			Hint:    "fix each problem in the template or its values, then render again",
+		}), nil
 	}
 	return types.Ok(out), nil
 }
 
-// EmitFileOf is emit\file.
-func EmitFileOf(_ context.Context, path string, t types.Template) (types.EmitFile, error) {
+// EmitFile is emit\file.
+func EmitFile(_ context.Context, path string, t types.Template) (types.EmitFile, error) {
 	return types.EmitFile{Path: path, Template: t}, nil
 }
 
@@ -128,7 +138,7 @@ func EmitFileOf(_ context.Context, path string, t types.Template) (types.EmitFil
 func EmitPlan(ctx context.Context, files []types.EmitFile) (types.EditPlan, error) {
 	index, missing := encodingIndex(ctx)
 	if missing != nil {
-		return refusedPlan(nil, []types.EditRefusal{{Rule: missing.Code, Reason: missing.Message + ": " + missing.Hint}}), nil
+		return refusedPlan(nil, []types.EditRefusal{{Rule: missing.Code, Reason: fmt.Sprintf("%s: %s", missing.Message, missing.Hint)}}), nil
 	}
 	var refused []types.EditRefusal
 	changes := make([]types.EditChange, 0, len(files))
@@ -218,17 +228,6 @@ func templateName(t types.Template) string {
 		return t.Source
 	}
 	return "a template built in Buzz"
-}
-
-// problemsDiagnostic is one Diagnostic for every problem in a template, one per
-// line, under the first problem's code.
-func problemsDiagnostic(name string, problems emit.Problems, hint string) types.Diagnostic {
-	return types.Diagnostic{
-		Code:    string(problems[0].Code),
-		Message: strings.Join(problems.Lines(name), "\n"),
-		URL:     types.CodeURL(problems[0].Code),
-		Hint:    hint,
-	}
 }
 
 func errorDiagnostic(err error) types.Diagnostic {

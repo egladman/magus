@@ -222,7 +222,6 @@ func (s *RenderSuite) TestAHoleWithNoExpressionIsStillNamed() {
 func (s *RenderSuite) TestAnUnknownEncodingNamesTheLanguageWhenTheSpellIsUnknown() {
 	index := map[string]spells.LanguageEncodings{".go": {Language: "go"}}
 	_, ps := Render(tmpl([]string{"", ""}, hole("x", "", "path", "a")), "a.go", index)
-	s.Require().Len(ps, 1)
-	s.Equal(types.EmitUnknownEncoding, ps[0].Code)
-	s.Equal("the spell declaring go declares no path encoding for .go (a.go); block, raw exist. add it to the spell's mgs_getLanguage, or encode in Buzz and name raw", ps[0].Message)
+	s.Equal(Problems{{Code: types.EmitUnknownEncoding, Line: 2, Column: 1,
+		Message: "the spell declaring go declares no path encoding for .go (a.go); block, raw exist. add it to the spell's mgs_getLanguage, or encode in Buzz and name raw"}}, ps)
 }

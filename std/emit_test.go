@@ -40,8 +40,10 @@ func (s *EmitModuleSuite) read(rel string) string {
 	return string(body)
 }
 
-func goSpell() *spells.Spell {
-	return spells.NewSpell("golang",
+// inRoot is a run in s.root carrying the go language, as magus buzz carries the
+// workspace's.
+func (s *EmitModuleSuite) inRoot() context.Context {
+	golang := spells.NewSpell("golang",
 		spells.WithLanguage("go"),
 		spells.WithLanguageExtensions([]string{".go"}),
 		spells.WithSyntax(&spells.Syntax{Encodings: []spells.Encoding{
@@ -50,12 +52,7 @@ func goSpell() *spells.Spell {
 				{Text: `\`, To: `\\`}, {Text: `"`, To: `\"`}, {Text: "\n", To: `\n`},
 			}},
 		}}))
-}
-
-// inRoot is a run in s.root carrying the go language, as magus buzz carries the
-// workspace's.
-func (s *EmitModuleSuite) inRoot() context.Context {
-	return WithLanguages(WithCurrentWorkingDirectory(context.Background(), s.root), []*spells.Spell{goSpell()})
+	return WithLanguages(WithCurrentWorkingDirectory(context.Background(), s.root), []*spells.Spell{golang})
 }
 
 func (s *EmitModuleSuite) load(ctx context.Context, rel string, values map[string]any) types.Result[types.Template] {
@@ -201,7 +198,7 @@ func (s *EmitModuleSuite) TestAMapThatIsNotATemplateIsRefusedByKind() {
 
 func (s *EmitModuleSuite) TestFileCarriesPathAndTemplate() {
 	t, _ := EmitText(s.inRoot(), "x\n")
-	f, err := EmitFileOf(s.inRoot(), "a.go", t)
+	f, err := EmitFile(s.inRoot(), "a.go", t)
 	s.Require().NoError(err)
 	s.Equal(types.EmitFile{Path: "a.go", Template: t}, f)
 }
@@ -213,9 +210,15 @@ func (s *EmitModuleSuite) TestPlanCreatesANewFileThatApplyWrites() {
 
 	p := s.plan(s.inRoot(), f)
 
-	s.Require().Empty(p.Refused)
-	s.Equal([]types.EditChange{{Path: "price/price.go", New: "package price\n\nconst Name = \"p\"\n", Create: true}}, p.Changes)
-	s.Equal([]string{"price"}, p.MakesDirs)
+	s.Require().NotEmpty(p.Digest)
+	s.Require().Len(p.Files, 1)
+	got := p
+	got.Digest, got.Files = "", nil
+	s.Equal(types.EditPlan{
+		Changes:   []types.EditChange{{Path: "price/price.go", New: "package price\n\nconst Name = \"p\"\n", Create: true}},
+		Spans:     []types.EditSpan{},
+		MakesDirs: []string{"price"},
+	}, got)
 	s.NoFileExists(filepath.Join(s.root, "price/price.go"))
 
 	r, err := SpliceApply(s.inRoot(), p)
