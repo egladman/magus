@@ -8,11 +8,11 @@ import (
 	"github.com/egladman/magus/libs/safetyscissors/verdict"
 )
 
-// Act names what a principal asks to do, such as "refund" or "publish". A bundle
+// Act names what a principal asks to do, such as "refund" or "publish". A scope
 // declares it, in lowercase words of letters and digits joined by single hyphens.
 type Act string
 
-// Request is one question put to a [Table]: may Principal do Act to Target, with
+// Request is one question put to a [RuleSet]: may Principal do Act to Target, with
 // Detail? All three are the caller's own attribute types.
 type Request[P, T, D any] struct {
 	Principal P
@@ -22,11 +22,11 @@ type Request[P, T, D any] struct {
 }
 
 // When is a rule's condition. It reports whether the rule applies to the request; an
-// error makes [Table.Judge] deny.
+// error makes [RuleSet.Judge] deny.
 type When[P, T, D any] func(context.Context, Request[P, T, D]) (bool, error)
 
 // Rule permits or forbids one act when its condition holds. Build one with [Permit] or
-// [Forbid]; [New] and [Table.Extend] validate it.
+// [Forbid]; [New] and [RuleSet.Extend] validate it.
 type Rule[P, T, D any] struct {
 	name        string
 	act         Act
@@ -34,7 +34,7 @@ type Rule[P, T, D any] struct {
 	decision    verdict.Decision
 	permits     bool
 	when        When[P, T, D]
-	bundle      string
+	scope       string
 }
 
 // Permit is a rule that allows act when when holds. description is the condition in one
@@ -64,13 +64,13 @@ func (r Rule[P, T, D]) Decision() verdict.Decision { return r.decision }
 // Permits reports whether the rule is a permit rather than a forbid.
 func (r Rule[P, T, D]) Permits() bool { return r.permits }
 
-// Bundle names the bundle that declared the rule, or "" before a table holds it.
-func (r Rule[P, T, D]) Bundle() string { return r.bundle }
+// Scope names the scope that declared the rule, or "" before a rule set holds it.
+func (r Rule[P, T, D]) Scope() string { return r.scope }
 
-// validate checks what a rule says about itself, apart from the table it joins.
-func (r Rule[P, T, D]) validate(bundle string) error {
+// validate checks what a rule says about itself, apart from the rule set it joins.
+func (r Rule[P, T, D]) validate(scope string) error {
 	if err := verdict.ValidateRuleName(r.name); err != nil {
-		return &DeclarationError{Bundle: bundle, Rule: r.name, Problem: "the rule name is refused", Err: err}
+		return &DeclarationError{Scope: scope, Rule: r.name, Problem: "the rule name is refused", Err: err}
 	}
 	problem := ""
 	switch {
@@ -82,7 +82,7 @@ func (r Rule[P, T, D]) validate(bundle string) error {
 		problem = fmt.Sprintf("a forbid answers deny or ask, not %s", r.decision)
 	}
 	if problem != "" {
-		return &DeclarationError{Bundle: bundle, Rule: r.name, Problem: problem}
+		return &DeclarationError{Scope: scope, Rule: r.name, Problem: problem}
 	}
 	return nil
 }

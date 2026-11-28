@@ -17,12 +17,12 @@ type invoice struct {
 
 type pay = Request[clerk, invoice, struct{}]
 
-func ExampleTable_Judge() {
+func ExampleRuleSet_Judge() {
 	ownTeam := func(_ context.Context, r pay) (bool, error) { return r.Principal.Team == r.Target.Team, nil }
 	large := func(_ context.Context, r pay) (bool, error) { return r.Target.Total > 1000, nil }
 	audited := func(_ context.Context, r pay) (bool, error) { return r.Target.Team == "audit", nil }
 
-	accounts, err := New(Bundle[clerk, invoice, struct{}]{
+	accounts, err := New(Scope[clerk, invoice, struct{}]{
 		Name: "accounts",
 		Acts: []Act{"pay"},
 		Rules: []Rule[clerk, invoice, struct{}]{
@@ -34,7 +34,7 @@ func ExampleTable_Judge() {
 		fmt.Println(err)
 		return
 	}
-	withAudit, err := accounts.Extend(Bundle[clerk, invoice, struct{}]{
+	withAudit, err := accounts.Extend(Scope[clerk, invoice, struct{}]{
 		Name: "audit",
 		Rules: []Rule[clerk, invoice, struct{}]{
 			Forbid("audit-freeze", "pay", verdict.Deny, "audit's invoices are frozen", audited),

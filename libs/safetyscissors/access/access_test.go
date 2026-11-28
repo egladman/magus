@@ -27,8 +27,8 @@ const (
 	chargeback Act = "chargeback"
 )
 
-func supportDesk() Bundle[agent, ticket, int] {
-	return Bundle[agent, ticket, int]{
+func supportDesk() Scope[agent, ticket, int] {
+	return Scope[agent, ticket, int]{
 		Name: "support",
 		Acts: []Act{refund},
 		Rules: []Rule[agent, ticket, int]{
@@ -44,8 +44,8 @@ func supportDesk() Bundle[agent, ticket, int] {
 	}
 }
 
-func finance() Bundle[agent, ticket, int] {
-	return Bundle[agent, ticket, int]{
+func finance() Scope[agent, ticket, int] {
+	return Scope[agent, ticket, int]{
 		Name: "finance",
 		Acts: []Act{chargeback},
 		Rules: []Rule[agent, ticket, int]{
@@ -59,7 +59,7 @@ func finance() Bundle[agent, ticket, int] {
 
 type supportDeskSuite struct {
 	suite.Suite
-	table *Table[agent, ticket, int]
+	set *RuleSet[agent, ticket, int]
 }
 
 func TestSupportDesk(t *testing.T) {
@@ -68,13 +68,13 @@ func TestSupportDesk(t *testing.T) {
 }
 
 func (s *supportDeskSuite) SetupTest() {
-	table, err := New(supportDesk())
+	set, err := New(supportDesk())
 	s.Require().NoError(err)
-	s.table = table
+	s.set = set
 }
 
-func (s *supportDeskSuite) judge(table *Table[agent, ticket, int], who agent, what ticket, amount int) verdict.Verdict {
-	v, err := table.Judge(s.T().Context(), refundRequest{Principal: who, Act: refund, Target: what, Detail: amount})
+func (s *supportDeskSuite) judge(set *RuleSet[agent, ticket, int], who agent, what ticket, amount int) verdict.Verdict {
+	v, err := set.Judge(s.T().Context(), refundRequest{Principal: who, Act: refund, Target: what, Detail: amount})
 	s.Require().NoError(err)
 	return v
 }
@@ -84,20 +84,20 @@ func alice() agent { return agent{Team: "billing", Clearance: 1000} }
 func open() ticket { return ticket{Team: "billing", Limit: 1000} }
 
 func (s *supportDeskSuite) TestARefundWithinEveryLimitDefers() {
-	s.Equal(verdict.Verdict{}, s.judge(s.table, alice(), open(), 50))
+	s.Equal(verdict.Verdict{}, s.judge(s.set, alice(), open(), 50))
 }
 
 func (s *supportDeskSuite) TestAFlaggedTicketIsDenied() {
 	flagged := open()
 	flagged.Flagged = true
-	v := s.judge(s.table, alice(), flagged, 50)
+	v := s.judge(s.set, alice(), flagged, 50)
 	s.Equal(verdict.Deny, v.Decision)
 	s.Equal("flagged-ticket", v.Rule)
 	s.Equal("a flagged ticket is never refunded", v.Reason)
 }
 
 func (s *supportDeskSuite) TestARefundOver100Asks() {
-	v := s.judge(s.table, alice(), open(), 150)
+	v := s.judge(s.set, alice(), open(), 150)
 	s.Equal(verdict.Ask, v.Decision)
 	s.Equal("large-refund", v.Rule)
 }
@@ -105,7 +105,7 @@ func (s *supportDeskSuite) TestARefundOver100Asks() {
 func (s *supportDeskSuite) TestFlaggedAndLargeTogetherIsADeny() {
 	flagged := open()
 	flagged.Flagged = true
-	v := s.judge(s.table, alice(), flagged, 150)
+	v := s.judge(s.set, alice(), flagged, 150)
 	s.Equal(verdict.Deny, v.Decision)
 	s.Equal("flagged-ticket", v.Rule)
 }
@@ -113,7 +113,7 @@ func (s *supportDeskSuite) TestFlaggedAndLargeTogetherIsADeny() {
 func (s *supportDeskSuite) TestOverTheTicketLimitIsADenyListingThePermit() {
 	small := open()
 	small.Limit = 20
-	v := s.judge(s.table, alice(), small, 50)
+	v := s.judge(s.set, alice(), small, 50)
 	s.Equal(verdict.Deny, v.Decision)
 	s.Contains(v.Reason, "refund-own-team: the agent is on the ticket's team and the amount is within the ticket's limit and the agent's clearance")
 }
@@ -121,7 +121,7 @@ func (s *supportDeskSuite) TestOverTheTicketLimitIsADenyListingThePermit() {
 func (s *supportDeskSuite) TestOverTheAgentClearanceIsADeny() {
 	junior := alice()
 	junior.Clearance = 20
-	v := s.judge(s.table, junior, open(), 50)
+	v := s.judge(s.set, junior, open(), 50)
 	s.Equal(verdict.Deny, v.Decision)
 	s.Contains(v.Reason, "refund-own-team")
 }
@@ -129,7 +129,7 @@ func (s *supportDeskSuite) TestOverTheAgentClearanceIsADeny() {
 func (s *supportDeskSuite) TestAnotherTeamsTicketIsADenyListingThePermit() {
 	shipping := open()
 	shipping.Team = "shipping"
-	v := s.judge(s.table, alice(), shipping, 50)
+	v := s.judge(s.set, alice(), shipping, 50)
 	s.Equal(verdict.Deny, v.Decision)
 	s.Contains(v.Reason, "refund-own-team: ")
 }
@@ -139,13 +139,13 @@ func (s *supportDeskSuite) TestAnotherTeamsTicketIsADenyListingThePermit() {
 func (s *supportDeskSuite) TestAnAskForbidNeverSoftensAMissingPermit() {
 	shipping := open()
 	shipping.Team = "shipping"
-	v := s.judge(s.table, alice(), shipping, 150)
+	v := s.judge(s.set, alice(), shipping, 150)
 	s.Equal(verdict.Deny, v.Decision)
 	s.Contains(v.Reason, "refund-own-team")
 }
 
 func (s *supportDeskSuite) TestAnUndeclaredActErrorsAndDenies() {
-	v, err := s.table.Judge(s.T().Context(), refundRequest{Principal: alice(), Act: "void", Target: open()})
+	v, err := s.set.Judge(s.T().Context(), refundRequest{Principal: alice(), Act: "void", Target: open()})
 	var undeclared *UndeclaredActError
 	s.Require().ErrorAs(err, &undeclared)
 	s.Equal(Act("void"), undeclared.Act)
@@ -153,9 +153,9 @@ func (s *supportDeskSuite) TestAnUndeclaredActErrorsAndDenies() {
 }
 
 func (s *supportDeskSuite) TestFinanceDeclaresItsOwnAct() {
-	table, err := s.table.Extend(finance())
+	set, err := s.set.Extend(finance())
 	s.Require().NoError(err)
-	v, err := table.Judge(s.T().Context(), refundRequest{Principal: agent{Team: "finance"}, Act: chargeback, Target: open()})
+	v, err := set.Judge(s.T().Context(), refundRequest{Principal: agent{Team: "finance"}, Act: chargeback, Target: open()})
 	s.Require().NoError(err)
 	s.Equal(verdict.Verdict{}, v)
 }
@@ -164,42 +164,42 @@ func (s *supportDeskSuite) TestFinanceCannotPermitARefund() {
 	b := finance()
 	b.Rules = append(b.Rules, Permit("finance-refunds", refund, "the agent is on the finance team",
 		func(_ context.Context, r refundRequest) (bool, error) { return r.Principal.Team == "finance", nil }))
-	table, err := s.table.Extend(b)
-	s.Nil(table)
+	set, err := s.set.Extend(b)
+	s.Nil(set)
 	var foreign *ForeignPermitError
 	s.Require().ErrorAs(err, &foreign)
-	s.Equal(ForeignPermitError{Rule: "finance-refunds", Act: refund, Bundle: "finance", DeclaredBy: "support"}, *foreign)
+	s.Equal(ForeignPermitError{Rule: "finance-refunds", Act: refund, Scope: "finance", DeclaredBy: "support"}, *foreign)
 }
 
 func (s *supportDeskSuite) TestFinanceMayForbidARefund() {
-	table, err := s.table.Extend(finance())
+	set, err := s.set.Extend(finance())
 	s.Require().NoError(err)
-	v := s.judge(table, alice(), open(), 600)
+	v := s.judge(set, alice(), open(), 600)
 	s.Equal(verdict.Deny, v.Decision)
 	s.Equal("refund-over-500", v.Rule)
 }
 
-func (s *supportDeskSuite) TestExtendLeavesTheOldTableUnchanged() {
-	before := s.table.Rules()
-	_, err := s.table.Extend(finance())
+func (s *supportDeskSuite) TestExtendLeavesTheOldRuleSetUnchanged() {
+	before := s.set.Rules()
+	_, err := s.set.Extend(finance())
 	s.Require().NoError(err)
-	s.Len(s.table.Rules(), len(before))
-	s.Equal(verdict.Ask, s.judge(s.table, alice(), open(), 600).Decision, "the old table never learns finance's forbid")
-	_, err = s.table.Judge(s.T().Context(), refundRequest{Act: chargeback})
+	s.Len(s.set.Rules(), len(before))
+	s.Equal(verdict.Ask, s.judge(s.set, alice(), open(), 600).Decision, "the old rule set never learns finance's forbid")
+	_, err = s.set.Judge(s.T().Context(), refundRequest{Act: chargeback})
 	var undeclared *UndeclaredActError
 	s.ErrorAs(err, &undeclared)
 }
 
-func (s *supportDeskSuite) TestRulesListInDeclarationOrderWithTheirBundle() {
-	table, err := s.table.Extend(finance())
+func (s *supportDeskSuite) TestRulesListInDeclarationOrderWithTheirScope() {
+	set, err := s.set.Extend(finance())
 	s.Require().NoError(err)
-	var names, bundles []string
-	for _, r := range table.Rules() {
+	var names, scopes []string
+	for _, r := range set.Rules() {
 		names = append(names, r.Name())
-		bundles = append(bundles, r.Bundle())
+		scopes = append(scopes, r.Scope())
 	}
 	s.Equal([]string{"refund-own-team", "flagged-ticket", "large-refund", "chargeback-by-finance", "refund-over-500"}, names)
-	s.Equal([]string{"support", "support", "support", "finance", "finance"}, bundles)
+	s.Equal([]string{"support", "support", "support", "finance", "finance"}, scopes)
 }
 
 type researcher struct{ Name string }
@@ -218,8 +218,8 @@ const (
 
 func always(context.Context, draftRequest) (bool, error) { return true, nil }
 
-func pipeline() Bundle[researcher, draft, struct{}] {
-	return Bundle[researcher, draft, struct{}]{
+func pipeline() Scope[researcher, draft, struct{}] {
+	return Scope[researcher, draft, struct{}]{
 		Name: "research",
 		Acts: []Act{publish, accept},
 		Rules: []Rule[researcher, draft, struct{}]{
@@ -236,7 +236,7 @@ func pipeline() Bundle[researcher, draft, struct{}] {
 
 type researchPipelineSuite struct {
 	suite.Suite
-	table *Table[researcher, draft, struct{}]
+	set *RuleSet[researcher, draft, struct{}]
 }
 
 func TestResearchPipeline(t *testing.T) {
@@ -245,13 +245,13 @@ func TestResearchPipeline(t *testing.T) {
 }
 
 func (s *researchPipelineSuite) SetupTest() {
-	table, err := New(pipeline())
+	set, err := New(pipeline())
 	s.Require().NoError(err)
-	s.table = table
+	s.set = set
 }
 
 func (s *researchPipelineSuite) judge(who string, act Act, d draft) verdict.Verdict {
-	v, err := s.table.Judge(s.T().Context(), draftRequest{Principal: researcher{Name: who}, Act: act, Target: d})
+	v, err := s.set.Judge(s.T().Context(), draftRequest{Principal: researcher{Name: who}, Act: act, Target: d})
 	s.Require().NoError(err)
 	return v
 }
