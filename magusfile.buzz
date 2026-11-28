@@ -3187,6 +3187,8 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
 // naming each file and the command that merges it. It only reads: magus never writes
 // host config. The reads are what `magus describe harness` plans from.
 export fun harness_drift(ctx: magus\Context, args: [str]) > void !> any {
+    // go_build's install writes the hooks files read below, so drift judges them after it.
+    ctx.needs(go_build);
     ctx.readsFiles(["magusfile.buzz", "magusfiles/build/harness.buzz", "spells/harness/**/*.buzz",
                     ".claude/settings.json", ".cursor/hooks.json", ".codex/hooks.json",
                     ".codex/rules/*.rules", "opencode.json"]);
