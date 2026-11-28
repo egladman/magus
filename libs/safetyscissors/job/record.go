@@ -37,6 +37,7 @@ type jobSpec struct {
 	DependsOn      []string                    `json:"depends_on,omitempty"`
 	Integrates     []string                    `json:"integrates,omitempty"`
 	Breaks         []string                    `json:"breaks,omitempty"`
+	Creates        []string                    `json:"creates,omitempty"`
 	BriefFormat    string                      `json:"brief_format,omitempty"`
 	Delivery       string                      `json:"delivery,omitempty"`
 	ParentHead     string                      `json:"parent_head,omitempty"`
@@ -164,7 +165,7 @@ func recordSpec(row Job, unknown map[string]codec.RawMessage) jobSpec {
 	spec := jobSpec{
 		Parent: row.Parent, Agent: recordAgent(row.Agent), Checkpoint: row.Checkpoint,
 		Paths:     row.Paths,
-		DependsOn: row.DependsOn, Integrates: row.Integrates, Breaks: row.Breaks,
+		DependsOn: row.DependsOn, Integrates: row.Integrates, Breaks: row.Breaks, Creates: row.Creates,
 		BriefFormat: string(row.BriefFormat), Delivery: row.Delivery, ParentHead: row.ParentHead,
 		Follows: row.Follows, MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims,
 		Deferred: row.Deferred, LeftUnmerged: row.LeftUnmerged, Weight: row.Weight,
@@ -264,7 +265,7 @@ func (s jobSpec) job(bad *wireReads) Job {
 	row := Job{
 		Parent: s.Parent, Agent: s.Agent.spec(bad), Checkpoint: s.Checkpoint,
 		Paths:     s.Paths,
-		DependsOn: s.DependsOn, Integrates: s.Integrates, Breaks: s.Breaks,
+		DependsOn: s.DependsOn, Integrates: s.Integrates, Breaks: s.Breaks, Creates: s.Creates,
 		BriefFormat: wireBriefFormat().read(s.BriefFormat, bad), Delivery: s.Delivery, ParentHead: s.ParentHead,
 		Follows: s.Follows, MaxAttempts: s.MaxAttempts, MaxClaims: s.MaxClaims,
 		Deferred: s.Deferred, LeftUnmerged: s.LeftUnmerged, Weight: s.Weight,

@@ -104,6 +104,7 @@ magus__Workspace__fileDiskAttention
 magus__Workspace__forkFacts
 magus__Workspace__grouping
 magus__Workspace__jobs
+magus__Workspace__newDirs
 magus__Workspace__putJob
 magus__Workspace__risk
 magus__Workspace__skills

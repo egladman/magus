@@ -139,6 +139,13 @@
       },
       "description": "Breaks are the flags, JSON keys, exported symbols or stored formats the root approved this job breaking; empty means it breaks nothing on its own authority. See [Job.Breaks]."
     },
+    "creates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Creates are the directories the root approved this job creating. See [Job.Creates]."
+    },
     "weight": {
       "type": "number",
       "description": "Weight is the job's lean on the machine budget, in (0,1]: omitted means 0.5, and an explicit 0 is out of range. See [Job.Weight]."

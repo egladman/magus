@@ -303,6 +303,32 @@ func reportForkFacts(ctx context.Context, store *job.Store, root string) {
 	slog.InfoContext(ctx, job.ForkFactsLine(facts), attr.Notice("note"))
 }
 
+// graphDirs lists the domain graph's directory nodes. A graph that would not load is an
+// error, so the measure says unknown rather than calling every directory new.
+func graphDirs(ctx context.Context, graph *evidence.Graph, paths []string) func() ([]string, error) {
+	return func() ([]string, error) {
+		g := graph.LoadDomain(ctx, paths)
+		if g == nil {
+			return nil, fmt.Errorf("the knowledge graph would not load or is held back by a stale symbol index (%s)", hint.GraphBuild.String())
+		}
+		var dirs []string
+		for _, n := range g.Nodes() {
+			if n.Kind == types.KindDir {
+				dirs = append(dirs, n.ID)
+			}
+		}
+		return dirs, nil
+	}
+}
+
+// reportNewDirs prints each directory writes would create, with its
+// neighbours, or why that is unknown. Workspace policy decides whether a fork stops.
+func reportNewDirs(ctx context.Context, root string, writes []string, graph *evidence.Graph) {
+	for _, line := range job.MeasureNewDirs(root, writes, graphDirs(ctx, graph, writes)).Lines() {
+		slog.InfoContext(ctx, line, attr.Notice("note"))
+	}
+}
+
 // lsJobs is `magus ls jobs`: every live job this repository carries, whoever holds it.
 func lsJobs(root string, args []string) error {
 	var all bool
@@ -469,6 +495,8 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	facts := evidence.LeaseBoundary(ctx, root, store, row, leases, graph, jobEvidenceEnv())
 	waiting.Stop()
 	facts.Evidence, facts.GraphCold = evidence.LeaseGraphEvidence(ctx, graph, row.Paths.Write)
+	newDirs := job.MeasureNewDirs(root, row.Paths.Write, graphDirs(ctx, graph, row.Paths.Write))
+	facts.NewDirs = &newDirs
 	tries, err := store.Attempts(ctx)
 	if err != nil {
 		return err
@@ -812,6 +840,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	judgedLive := job.NoteForkJudgedAsUpdate(ctx, store, row.ID)
 	if row.Parent == "" && len(row.Integrates) == 0 && len(validation.Problems) == 0 {
 		reportForkFacts(ctx, store, root)
+	}
+	if len(row.Integrates) == 0 {
+		reportNewDirs(ctx, root, row.Paths.Write, graph)
 	}
 	if globalCfg.DryRun {
 		return forkDryRun(opts, validation)

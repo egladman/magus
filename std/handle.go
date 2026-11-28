@@ -490,6 +490,29 @@ func MagusWorkspaceForkFacts(ctx context.Context, w types.MagusWorkspace) (jobty
 	return MagusForkFactsJob(ctx, w.Dir)
 }
 
+// MagusWorkspaceNewDirs is Workspace.newDirs: the directories writes would create in
+// w's checkout. A graph that does not load is Unknown, not an error, so a rule reports it.
+func MagusWorkspaceNewDirs(ctx context.Context, w types.MagusWorkspace, writes []string) (jobtypes.NewDirs, error) {
+	dirs := func() ([]string, error) {
+		g, err := graphsFromContext(ctx, "workspace().newDirs")
+		if err != nil {
+			return nil, err
+		}
+		kg, err := g.KnowledgeGraph(ctx, types.GraphRequest{})
+		if err != nil {
+			return nil, err
+		}
+		var out []string
+		for _, n := range kg.Nodes() {
+			if n.Kind == types.KindDir {
+				out = append(out, n.ID)
+			}
+		}
+		return out, nil
+	}
+	return job.MeasureNewDirs(w.Dir, writes, dirs), nil
+}
+
 // MagusWorkspaceUnmerged is Workspace.unmerged, about w's checkout.
 func MagusWorkspaceUnmerged(ctx context.Context, w types.MagusWorkspace) (jobtypes.UnmergedReport, error) {
 	return MagusUnmergedJob(ctx, w.Dir)

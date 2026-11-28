@@ -63,6 +63,18 @@ var magusObjects = []Object{
 				Impl:    MagusWorkspaceForkFacts,
 			},
 			{
+				Name: "newDirs",
+				Doc: "The directories writes, a fork's write paths, would create in this Workspace's dir: {dirs, unknown}. " +
+					"A directory is new when the knowledge graph holds no dir node for it and nothing is on disk there; " +
+					"each NewDir carries the graph's directories whose last segment shares a word with its own. unknown " +
+					"says why the graph's directories went unread, and dirs is then empty without meaning none. Facts " +
+					"only: repo policy decides what they stop.",
+				Args:    []Arg{{Name: "writes"}},
+				Returns: []Ret{{Object: "NewDirs"}},
+				Raises:  true,
+				Impl:    MagusWorkspaceNewDirs,
+			},
+			{
 				Name: "unmerged",
 				Doc: "What the branch checked out at this Workspace's dir does not hold, for the job trees forked " +
 					"from it: filed or ended work off the branch, uncommitted paths in a filed row's checkout, and " +

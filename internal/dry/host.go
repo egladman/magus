@@ -589,6 +589,9 @@ func buildMagus(sess *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("magus__Workspace__forkFacts", function("magus.Workspace.forkFacts", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectJobForkFacts(job.ForkFacts{}), nil
 	}))
+	m.MapSet("magus__Workspace__newDirs", function("magus.Workspace.newDirs", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return bindgen.ObjectJobNewDirs(job.NewDirs{Unknown: "a dry run reads no knowledge graph"}), nil
+	}))
 	m.MapSet("magus__Workspace__unmerged", function("magus.Workspace.unmerged", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return bindgen.ObjectJobUnmergedReport(job.UnmergedReport{}), nil
 	}))

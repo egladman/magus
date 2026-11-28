@@ -385,6 +385,33 @@ func (s *jobSuite) TestDeclarationApplyCopiesBreaksAndClearsAnOmittedOne() {
 	s.Empty(row.Breaks)
 }
 
+func (s *jobSuite) TestDeclarationApplyCopiesCreates() {
+	var row Job
+	Declaration{ID: "worker", Creates: []string{" internal/hostcall ", ""}}.Apply(&row)
+	s.Equal([]string{"internal/hostcall"}, row.Creates)
+
+	Declaration{ID: "worker"}.ApplySpec(&row)
+	s.Empty(row.Creates)
+}
+
+func (s *jobSuite) TestACreatesEntryNamesOneWorkspaceDirectory() {
+	d := Declaration{ID: "worker", Creates: []string{"internal/hostcall", "libs/new/", "", "internal/*", "/abs", "../out", ".", "a//b"}}
+
+	var fields []string
+	for _, f := range d.Faults() {
+		if strings.HasPrefix(f.Field, "creates") {
+			fields = append(fields, f.Field)
+		}
+	}
+	s.Equal([]string{"creates[2]", "creates[3]", "creates[4]", "creates[5]", "creates[6]", "creates[7]"}, fields)
+}
+
+func (s *jobSuite) TestNewDirsLinesSayUnknownNeverNothing() {
+	s.Equal([]string{"new directories: unknown, no graph"}, NewDirs{Unknown: "no graph"}.Lines())
+	s.Empty(NewDirs{}.Lines())
+	s.Equal([]string{"new directory internal/a: no dir node; directories sharing its words: none"}, NewDirs{Dirs: []NewDir{{Dir: "internal/a"}}}.Lines())
+}
+
 // A pause holds until its bound and not a second past it; a pause naming no bound holds
 // until it is lifted.
 func (s *jobSuite) TestPausedAtLapsesAtItsBound() {

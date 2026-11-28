@@ -2,6 +2,7 @@ package job
 
 import (
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 )
@@ -261,6 +262,8 @@ func authorizeChild(actor Actor, id string, next Job, exists bool, rows []Job) e
 		return refuse(actor, id, "a child may only read what its parent reads, and this one's read paths reach further")
 	case !listedIn(next.Breaks, parent.Breaks):
 		return refuse(actor, id, "a child may only break what its parent may break, and this one's breaks reach further")
+	case !createsWithin(next.Creates, parent.Creates):
+		return refuse(actor, id, "a child may only create directories under those its parent may create, and this one's creates reach further")
 	case !Subset(parent.Paths.Deny, next.Paths.Deny):
 		return refuse(actor, id, "a child carries every deny_path its parent carries, and this one drops some")
 	case next.State != "" && next.State != StateDeclared:
@@ -316,6 +319,7 @@ func ChangedFields(prev, next Job, spec CheckSpec) ([]string, error) {
 	add("integrates", !slices.Equal(prev.Integrates, next.Integrates))
 	add("paths.soft", !slices.Equal(prev.Paths.Soft, next.Paths.Soft))
 	add("breaks", !slices.Equal(prev.Breaks, next.Breaks))
+	add("creates", !slices.Equal(prev.Creates, next.Creates))
 	add("follows", prev.Follows != next.Follows)
 	add("brief_format", prev.BriefFormat != next.BriefFormat)
 	add("delivery", prev.Delivery != next.Delivery)
@@ -417,6 +421,17 @@ func checksEqual(id string, a, b Postcondition, spec CheckSpec) (bool, error) {
 func listedIn(inner, outer []string) bool {
 	return !slices.ContainsFunc(inner, func(p string) bool {
 		return !slices.ContainsFunc(outer, func(o string) bool { return strings.TrimSpace(o) == strings.TrimSpace(p) })
+	})
+}
+
+// createsWithin reports whether every directory in inner is one of outer or sits under one.
+func createsWithin(inner, outer []string) bool {
+	return !slices.ContainsFunc(inner, func(c string) bool {
+		c = path.Clean(strings.TrimSpace(c))
+		return !slices.ContainsFunc(outer, func(o string) bool {
+			o = path.Clean(strings.TrimSpace(o))
+			return c == o || strings.HasPrefix(c, o+"/")
+		})
 	})
 }
 

@@ -139,6 +139,7 @@ func (a Applied) ChangeLines() []string {
 		"integrates":     {a.Prev.Integrates, a.Next.Integrates},
 		"paths.soft":     {a.Prev.Paths.Soft, a.Next.Paths.Soft},
 		"breaks":         {a.Prev.Breaks, a.Next.Breaks},
+		"creates":        {a.Prev.Creates, a.Next.Creates},
 		"postconditions": {postconditionIDs(a.Prev.Postconditions), postconditionIDs(a.Next.Postconditions)},
 	}
 	lines := make([]string, len(a.Changed))

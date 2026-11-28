@@ -444,6 +444,10 @@ type Job struct {
 	// this job breaking. Empty means the job breaks nothing on its own authority: a break
 	// outside the list is a finding for the root, not a decision for the worker.
 	Breaks []string `json:"breaks,omitempty" yaml:"breaks,omitempty"`
+	// Creates are the repo-relative directories the root approved this job creating. A new
+	// directory outside the list is a name the root has not seen: a fact for workspace
+	// policy, not a decision for the worker.
+	Creates []string `json:"creates,omitempty" yaml:"creates,omitempty"`
 	// ModelTier is the tier the store assigned for the requested model, and
 	// why. Store-computed like Releases. Nil means the workspace declared no
 	// model tiers when the job was written.
@@ -741,6 +745,38 @@ type ForkFacts struct {
 	LastTestRef      string `json:"last_test_ref,omitempty"      yaml:"last_test_ref,omitempty"`
 	LastTestRevision string `json:"last_test_revision,omitempty" yaml:"last_test_revision,omitempty"`
 	TestUnknown      string `json:"test_unknown,omitempty"       yaml:"test_unknown,omitempty"`
+}
+
+// NewDirs is each directory a fork's write paths would create: one with no
+// directory node in the graph and nothing on disk. Unknown says why the graph's
+// directories went unread, and Dirs is then empty without meaning none.
+type NewDirs struct {
+	Dirs    []NewDir `json:"dirs,omitempty"    yaml:"dirs,omitempty"`
+	Unknown string   `json:"unknown,omitempty" yaml:"unknown,omitempty"`
+}
+
+// NewDir is one directory a fork would create, with the graph's directories
+// whose last path segment shares a word with its last segment.
+type NewDir struct {
+	Dir       string   `json:"dir"                 yaml:"dir"`
+	Neighbors []string `json:"neighbors,omitempty" yaml:"neighbors,omitempty"`
+}
+
+// Lines renders d for a person, one line per new directory and one for an
+// unknown measure, none when the fork creates nothing.
+func (d NewDirs) Lines() []string {
+	if d.Unknown != "" {
+		return []string{"new directories: unknown, " + d.Unknown}
+	}
+	lines := make([]string, 0, len(d.Dirs))
+	for _, n := range d.Dirs {
+		near := "none"
+		if len(n.Neighbors) > 0 {
+			near = strings.Join(n.Neighbors, ", ")
+		}
+		lines = append(lines, fmt.Sprintf("new directory %s: no dir node; directories sharing its words: %s", n.Dir, near))
+	}
+	return lines
 }
 
 // FinishedBranch is a finished row's work that the base does not hold. Job is
@@ -1045,6 +1081,7 @@ func (j Job) Clone() Job {
 	c.DependsOn = slices.Clone(j.DependsOn)
 	c.Integrates = slices.Clone(j.Integrates)
 	c.Breaks = slices.Clone(j.Breaks)
+	c.Creates = slices.Clone(j.Creates)
 	c.Postconditions = clonePostconditions(j.Postconditions)
 	c.Releases = slices.Clone(j.Releases)
 	c.Claims = slices.Clone(j.Claims)

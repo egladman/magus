@@ -426,6 +426,8 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 		switch field {
 		case "depends_on", "breaks":
 			value = []any{"internal/job"}
+		case "creates":
+			value = []any{"internal/newpkg"}
 		case "paths":
 			value = map[string]any{"write": []any{"internal/job"}, "read": []any{"internal"}, "deny": []any{"internal/job/gen"}}
 		case "agent":

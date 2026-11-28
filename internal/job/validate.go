@@ -93,6 +93,7 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 		})
 		addedRow := job.Job{ID: id, Paths: job.Paths{Write: added, Soft: merged.Paths.Soft}, Parent: merged.Parent, DependsOn: merged.DependsOn}
 		ps = append(ps, onRow(addedWritePathProblems(ctx, store, addedRow, merged.Integrates), addedRow, merged)...)
+		ps = append(ps, existingCreatesProblems(store, merged.Creates, prev.Creates)...)
 		addedDenies := job.Job{ID: id, Paths: job.Paths{Deny: slices.DeleteFunc(slices.Clone(merged.Paths.Deny), func(p string) bool { return slices.Contains(prev.Paths.Deny, p) })}}
 		ps = append(ps, onRow(ungradableClaimProblems(ctx, store, addedDenies), addedDenies, merged)...)
 		ps = append(ps, onRow(unorderedFileShareProblems(ctx, store, claimingRows(rows), claiming(addedRow)), addedRow, merged)...)
@@ -123,6 +124,7 @@ func validateMerge(ctx context.Context, store *Store, rows []job.Job, id string,
 		ps = append(ps, claimCeilingProblems(merged, limits)...)
 		ps = append(ps, ambiguousSymbolProblems(ctx, merged.Postconditions, read)...)
 		ps = append(ps, mergedDirectoryProblems(ctx, store, merged, merged.Integrates)...)
+		ps = append(ps, existingCreatesProblems(store, merged.Creates, nil)...)
 		ps = append(ps, ungradableClaimProblems(ctx, store, merged)...)
 		ps = append(ps, wholeFileConfigClaimProblems(ctx, store, merged)...)
 		ps = append(ps, sharedCheckoutProblems(store, rows, merged)...)
@@ -930,7 +932,7 @@ func rowDeclaration(row job.Job) job.Declaration {
 	rec := job.Declaration{
 		ID: row.ID, Parent: row.Parent, Agent: row.Agent.Clone(), Checkpoint: row.Checkpoint,
 		Paths: job.Paths{Write: row.Paths.Write, Read: row.Paths.Read, Deny: row.Paths.Deny}, DependsOn: row.DependsOn,
-		Breaks: row.Breaks, Postconditions: row.Postconditions, State: row.State, ReadOnly: row.ReadOnly,
+		Breaks: row.Breaks, Creates: row.Creates, Postconditions: row.Postconditions, State: row.State, ReadOnly: row.ReadOnly,
 		MaxAttempts: row.MaxAttempts, MaxClaims: row.MaxClaims, Deviations: row.Deviations,
 		Delivery: row.Delivery, ParentHead: row.ParentHead,
 	}

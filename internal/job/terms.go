@@ -86,6 +86,9 @@ type Terms struct {
 	TestScope []TestScope `json:"test_scope,omitempty" yaml:"test_scope,omitempty"`
 	// Attempts are the lease's tries the store holds, oldest first.
 	Attempts []job.Attempt `json:"attempts,omitempty" yaml:"attempts,omitempty"`
+	// NewDirs is what [MeasureNewDirs] finds for the write paths. Nil means not measured,
+	// so terms rendered from the row alone say nothing rather than none.
+	NewDirs *job.NewDirs `json:"new_dirs,omitempty" yaml:"new_dirs,omitempty"`
 }
 
 // TermsEvidence is what the knowledge graph knows about one write path: the node it
@@ -142,6 +145,7 @@ type TermsFacts struct {
 	ReferencedOutsideGap string
 	TestScope            []TestScope
 	Attempts             []job.Attempt
+	NewDirs              *job.NewDirs
 }
 
 // NewTerms renders one job's terms: the job itself, plus what the workspace contributed.
@@ -164,6 +168,7 @@ func NewTerms(row job.Job, facts TermsFacts) Terms {
 		ReferencedOutsideGap: facts.ReferencedOutsideGap,
 		TestScope:            facts.TestScope,
 		Attempts:             facts.Attempts,
+		NewDirs:              facts.NewDirs,
 	}
 }
 
@@ -195,6 +200,10 @@ func (b Terms) String() string {
 	}
 	writeList(&s, deletionHeading, deletionLines(b.DeletionCandidates, b.DeletionsLeftOut))
 	writeList(&s, "write paths", b.Lease.Paths.Write)
+	writeList(&s, "may create", b.Lease.Creates)
+	if b.NewDirs != nil {
+		writeList(&s, "directories the write paths create", b.NewDirs.Lines())
+	}
 	writeList(&s, "deny paths", b.Lease.Paths.Deny)
 	writeList(&s, referencedHeading, referencedLines(b.ReferencedOutside, b.ReferencedOutsideGap))
 	writeList(&s, "projects", b.Projects)

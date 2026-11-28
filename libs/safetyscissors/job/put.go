@@ -32,6 +32,7 @@ type Put struct {
 	Paths          PathsPut         `json:"paths,omitzero"`
 	DependsOn      *[]string        `json:"depends_on,omitzero"`
 	Breaks         *[]string        `json:"breaks,omitzero"`
+	Creates        *[]string        `json:"creates,omitzero"`
 	Postconditions *[]Postcondition `json:"postconditions,omitzero"`
 	// Deviations replaces the row's deviations; each is validated as a declaration's would be.
 	Deviations *[]Deviation `json:"deviations,omitzero"`

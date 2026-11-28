@@ -270,6 +270,18 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ObjectJobForkFacts(ret0), nil
 	}))
+	m.MapSet("magus__Workspace__newDirs", vm.DirectValue("magus.magus__Workspace__newDirs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		recv, err := ffi.Object("magus\\magus__Workspace__newDirs", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		writes := ffi.StringSlice(bzArgs, 1)
+		ret0, err := std.MagusWorkspaceNewDirs(ctx, recv, writes)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ObjectJobNewDirs(ret0), nil
+	}))
 	m.MapSet("magus__Workspace__unmerged", vm.DirectValue("magus.magus__Workspace__unmerged", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		recv, err := ffi.Object("magus\\magus__Workspace__unmerged", "recv", bzArgs, 0, decode.DecodeMagusWorkspace)
 		if err != nil {

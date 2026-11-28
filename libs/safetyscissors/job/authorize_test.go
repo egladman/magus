@@ -58,6 +58,31 @@ func (s *AuthorizeSuite) TestAChildStaysInsideItsParentsBoundary() {
 	s.Error(AuthorizeRow(actor, "c", AsDeclaration, Job{}, dropsDeny, false, rows, specChecks{}))
 }
 
+func (s *AuthorizeSuite) TestAChildCreatesOnlyUnderItsParentsCreates() {
+	parent := s.worker()
+	parent.Creates = []string{"internal/x/new"}
+	child := func(creates ...string) Job {
+		return Job{ID: "c", Parent: "w", Paths: Paths{Write: []string{"internal/x/new/a.go"}, Deny: parent.Paths.Deny}, Creates: creates}
+	}
+	actor, rows := Actor{Lease: "w"}, []Job{parent}
+
+	s.Require().NoError(AuthorizeRow(actor, "c", AsDeclaration, Job{}, child("internal/x/new"), false, rows, specChecks{}))
+	s.Require().NoError(AuthorizeRow(actor, "c", AsDeclaration, Job{}, child("internal/x/new/sub"), false, rows, specChecks{}))
+	var refused *RefusedError
+	s.Require().ErrorAs(AuthorizeRow(actor, "c", AsDeclaration, Job{}, child("internal/x/newer"), false, rows, specChecks{}), &refused)
+	s.Contains(refused.Error(), "creates reach further")
+}
+
+func (s *AuthorizeSuite) TestChangedFieldsNamesCreates() {
+	prev := s.worker()
+	next := prev
+	next.Creates = []string{"internal/x/new"}
+
+	changed, err := ChangedFields(prev, next, specChecks{})
+	s.Require().NoError(err)
+	s.Equal([]string{"creates"}, changed)
+}
+
 func (s *AuthorizeSuite) TestAVerdictPassesOnlyARowBelowTheHolder() {
 	parent, child := s.worker(), Job{ID: "c", Parent: "w", State: StateExited}
 	passed := child

@@ -105,6 +105,35 @@ func TestTermsRendersTheGolden(t *testing.T) {
 
 // A cold graph says so once. Silence would read as "nothing depends on any of this",
 // which is the opposite of what magus knows.
+type termsNewDirsSuite struct{ suite.Suite }
+
+func TestTermsNewDirs(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, new(termsNewDirsSuite))
+}
+
+func (s *termsNewDirsSuite) TestEachNewDirectoryIsALineWithItsNeighbours() {
+	row := briefRow()
+	row.Creates = []string{"internal/hostcall"}
+	measured := job.NewDirs{Dirs: []job.NewDir{{Dir: "internal/hostcall", Neighbors: []string{"internal/host"}}}}
+
+	got := NewTerms(row, TermsFacts{NewDirs: &measured}).String()
+
+	s.Contains(got, "may create\n  internal/hostcall\n")
+	s.Contains(got, "directories the write paths create\n  new directory internal/hostcall: no dir node; directories sharing its words: internal/host\n")
+}
+
+func (s *termsNewDirsSuite) TestAnUnreadMeasureSaysUnknown() {
+	got := NewTerms(briefRow(), TermsFacts{NewDirs: &job.NewDirs{Unknown: "no graph"}}).String()
+
+	s.Contains(got, "new directories: unknown, no graph")
+}
+
+func (s *termsNewDirsSuite) TestNoMeasureOrNoNewDirectoryPrintsNoSection() {
+	s.NotContains(NewTerms(briefRow(), TermsFacts{}).String(), "directories the write paths create")
+	s.NotContains(NewTerms(briefRow(), TermsFacts{NewDirs: &job.NewDirs{}}).String(), "directories the write paths create")
+}
+
 func TestTermsNamesAColdGraphOnce(t *testing.T) {
 	t.Parallel()
 

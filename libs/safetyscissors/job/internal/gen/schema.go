@@ -37,6 +37,7 @@ var jobSpec = codec.ObjectSchema{Name: "jobSpec", Closed: false, Fields: map[str
 	"depends_on":     nil,
 	"integrates":     nil,
 	"breaks":         nil,
+	"creates":        nil,
 	"brief_format":   nil,
 	"delivery":       nil,
 	"parent_head":    nil,

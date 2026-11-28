@@ -67,6 +67,7 @@ func DecodePut(params map[string]any) (job.Put, error) {
 	}
 	list("depends_on", &put.DependsOn)
 	list("breaks", &put.Breaks)
+	list("creates", &put.Creates)
 	if postconditions, ok, e := decodeObjects[job.Postcondition](params, "postconditions", "postconditions"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
@@ -214,6 +215,7 @@ func PutMerge(p job.Put) (func(*job.Job), error) {
 		{p.Paths.Read, func(u *job.Job, v []string) { u.Paths.Read = v }},
 		{p.DependsOn, func(u *job.Job, v []string) { u.DependsOn = v }},
 		{p.Breaks, func(u *job.Job, v []string) { u.Breaks = v }},
+		{p.Creates, func(u *job.Job, v []string) { u.Creates = v }},
 	} {
 		if l.v != nil {
 			v, apply := slices.Clone(*l.v), l.apply
@@ -349,7 +351,7 @@ func declaredKeys(p job.Put) []string {
 		{"parent", p.Parent != nil}, {"agent", p.Agent != nil}, {"checkpoint", p.Checkpoint != nil},
 		{"brief_format", p.BriefFormat != nil}, {"timeout", p.Timeout != nil}, {"state", p.State != nil},
 		{"check", p.Check != nil}, {"paths.write", p.Paths.Write != nil}, {"paths.deny", p.Paths.Deny != nil},
-		{"paths.read", p.Paths.Read != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil},
+		{"paths.read", p.Paths.Read != nil}, {"depends_on", p.DependsOn != nil}, {"breaks", p.Breaks != nil}, {"creates", p.Creates != nil},
 		{"postconditions", p.Postconditions != nil}, {"deviations", p.Deviations != nil}, {"read_only", p.ReadOnly != nil},
 		{"max_attempts", p.MaxAttempts != nil}, {"max_claims", p.MaxClaims != nil}, {"follows", p.Follows != nil},
 		{"weight", p.Weight != nil}, {"delivery", p.Delivery != nil}, {"parent_head", p.ParentHead != nil},
@@ -365,7 +367,7 @@ func declaredKeys(p job.Put) []string {
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "agent", "checkpoint", "paths",
-	"depends_on", "breaks", "brief_format", "check", "validation", "postconditions", "deviations", "state", "read_only",
+	"depends_on", "breaks", "creates", "brief_format", "check", "validation", "postconditions", "deviations", "state", "read_only",
 	"timeout", "max_attempts", "max_claims", "weight", "enter", "follows",
 	"delivery", "parent_head",
 }

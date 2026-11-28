@@ -3026,6 +3026,12 @@ func decodeJob(v vm.Value, path string) (types.Job, error) {
 				return out, err
 			}
 			out.Job.Breaks = strsBreaks
+		case "creates":
+			strsCreates, err := decodeStringList(item, path+".creates")
+			if err != nil {
+				return out, err
+			}
+			out.Job.Creates = strsCreates
 		case "modelTier":
 			if !item.IsNull() {
 				var optModelTier tier.Assignment

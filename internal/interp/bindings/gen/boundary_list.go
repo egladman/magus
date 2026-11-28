@@ -311,6 +311,8 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "NeighborhoodResult", Zero: types.KnowledgeNeighborhoodOutput{}, Encode: func(v any, enums ffi.EnumCases) vm.Value {
 		return ObjectKnowledgeNeighborhoodOutput(v.(types.KnowledgeNeighborhoodOutput), enums)
 	}},
+	{Name: "NewDir", Zero: job.NewDir{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobNewDir(v.(job.NewDir)) }},
+	{Name: "NewDirs", Zero: job.NewDirs{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobNewDirs(v.(job.NewDirs)) }},
 	{Name: "Node", Zero: types.Node{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectNode(v.(types.Node)) }},
 	{Name: "Observation", Zero: feedback.Observation{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectFeedbackObservation(v.(feedback.Observation)) }},
 	{Name: "Origin", Zero: job.Origin{}, Encode: func(v any, enums ffi.EnumCases) vm.Value { return ObjectJobOrigin(v.(job.Origin), enums) }},

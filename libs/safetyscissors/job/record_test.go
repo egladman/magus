@@ -127,6 +127,17 @@ func (s *RecordSuite) TestAPostconditionsBasesRoundTrip() {
 	s.Equal([]Basis{BasisWitnessed, BasisAttested}, got.Postconditions[0].Accept)
 }
 
+func (s *RecordSuite) TestCreatesRoundTripsThroughAStoredLine() {
+	line, err := codec.Marshal(recordJob(Job{ID: "a", State: StateDeclared, Creates: []string{"internal/hostcall"}}, nil))
+	s.Require().NoError(err)
+
+	got, ok, err := readRecord(line)
+
+	s.Require().NoError(err)
+	s.Require().True(ok)
+	s.Equal([]string{"internal/hostcall"}, got.Creates)
+}
+
 func (s *RecordSuite) TestAStoredDerivedPostconditionReadsBackDerived() {
 	row := Job{ID: "a", State: StateDeclared, Postconditions: []Postcondition{
 		{ID: "lint", Kind: PostconditionKindCheck, Check: checkJSON("lint", "."), Accept: []Basis{BasisWitnessed}, Derived: true},

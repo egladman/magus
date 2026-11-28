@@ -45,6 +45,8 @@ type Declaration struct {
 	// Breaks are the flags, JSON keys, exported symbols or stored formats the root approved
 	// this job breaking; empty means it breaks nothing on its own authority. See [Job.Breaks].
 	Breaks []string `json:"breaks,omitempty"`
+	// Creates are the directories the root approved this job creating. See [Job.Creates].
+	Creates []string `json:"creates,omitempty"`
 	// Weight is the job's lean on the machine budget, in (0,1]: omitted means 0.5, and an
 	// explicit 0 is out of range. See [Job.Weight].
 	Weight *float64 `json:"weight,omitzero"`
@@ -186,6 +188,23 @@ type Claim struct {
 	By       Origin        `json:"by"       yaml:"by"`
 }
 
+// createsFault says why c names no single workspace directory, or "". A glob or
+// a claim suffix would approve a family of names nobody has read.
+func createsFault(c string) string {
+	c = strings.TrimSpace(c)
+	switch clean := path.Clean(strings.TrimSuffix(c, "/")); {
+	case c == "":
+		return "is blank"
+	case strings.ContainsAny(c, "*?[{#!"):
+		return "is a pattern or a claim"
+	case clean == ".":
+		return "is the workspace root"
+	case clean != strings.TrimSuffix(c, "/"):
+		return "is not in clean form"
+	}
+	return pathOutsideWorkspace(c)
+}
+
 // pathOutsideWorkspace says why a declared path can name no workspace-relative path, or
 // "": the guard matches declarations against paths relative to the workspace root, never
 // expanding a ~ or reading an absolute path in one.
@@ -317,6 +336,13 @@ func (d Declaration) Faults(permissible ...Code) []Fault {
 		if strings.TrimSpace(b) == "" {
 			at := fmt.Sprintf("breaks[%d]", i)
 			invalid(at, at+" is blank", "name the flag, key, symbol or format the job may break, or drop the entry")
+		}
+	}
+	for i, c := range d.Creates {
+		if why := createsFault(c); why != "" {
+			at := fmt.Sprintf("creates[%d]", i)
+			invalid(at, fmt.Sprintf("%s %q %s, and an entry names one directory relative to the workspace root", at, c, why),
+				"name the directory the job creates, such as internal/newpkg")
 		}
 	}
 	for i, w := range d.Deviations {
@@ -469,6 +495,7 @@ func (d Declaration) Apply(j *Job) {
 	j.DependsOn = trimmedNonEmpty(d.DependsOn)
 	j.Integrates = trimmedNonEmpty(d.Integrates)
 	j.Breaks = trimmedNonEmpty(d.Breaks)
+	j.Creates = trimmedNonEmpty(d.Creates)
 	j.Agent = d.Agent.Trimmed()
 	j.Weight = 0
 	if d.Weight != nil {
